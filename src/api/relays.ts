@@ -79,9 +79,9 @@ function isRelay(value: unknown): value is Relay {
   }
   const candidate = value as Record<string, unknown>
   return (
-    typeof candidate['id'] === 'string' &&
-    typeof candidate['label'] === 'string' &&
-    typeof candidate['on'] === 'boolean'
+    typeof candidate.id === 'string' &&
+    typeof candidate.label === 'string' &&
+    typeof candidate.on === 'boolean'
   )
 }
 
@@ -105,7 +105,9 @@ export function parseRelayCollection(body: unknown): readonly Relay[] {
     throw malformed
   }
 
-  const { relays } = body as { relays: unknown }
+  // No assertion needed: the `in` check above narrowed `body` to something
+  // known to carry a `relays` key, so destructuring yields `unknown`.
+  const { relays } = body
   if (!Array.isArray(relays)) {
     throw malformed
   }

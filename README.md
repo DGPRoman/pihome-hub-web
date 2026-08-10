@@ -42,7 +42,9 @@ component deletes its styles with it. State is never carried by colour alone.
 **Nothing secret ships to the browser.** Vite inlines every `VITE_`-prefixed variable into
 the bundle, which makes it readable by anyone who opens devtools. The hub's API key is not
 build-time configuration and is never treated as such: in development the dev-server proxy
-attaches it in Node, after the browser's request has already been made.
+attaches it in Node, after the browser's request has already been made. That claim rests on a
+naming convention, which a rename could break silently, so CI builds with a canary key and
+fails if it finds the value anywhere in `dist/`.
 
 ## Quick start
 
@@ -77,15 +79,24 @@ it, not show an empty list.
 ## Development
 
 ```bash
+npm run format         # format
+npm run lint           # lint, with type-aware rules
 npm run typecheck      # type-check (strict)
 npm test               # test once
 npm run test:watch     # test on change
 npm run build          # type-check, then produce dist/
 ```
 
+CI runs the lot on every push, and the tests on Node 22 and 24.
+
 The browser does not type-check. Vite strips types and serves JavaScript, so a page can run
 perfectly while `npm run typecheck` fails — which is why it is a separate command and not
 folded into `dev`.
+
+Linting is type-aware, which is the reason it is worth running alongside the compiler: rules
+that read the type checker catch a promise nobody awaited, or a `switch` over a union that
+quietly stopped being exhaustive. Neither is visible from syntax alone. Formatting is
+Prettier's job and correctness is ESLint's, so the two are not configured to overlap.
 
 ## Project layout
 
@@ -106,21 +117,24 @@ src/
     └── global.css              design tokens and element defaults
 index.html                      the page Vite serves and builds
 vite.config.ts                  build, dev proxy and test configuration
+eslint.config.js                lint rules, type-aware over src and config
 public/favicon.svg              theme-aware favicon
+.github/workflows/ci.yml        format, lint, types, tests, build
 ```
 
 Each component sits beside its own `.module.css` and `.test.tsx`.
 
 ## Roadmap
 
-| Phase | Scope | Status |
-| --- | --- | --- |
-| 1 | Vite build, strict TypeScript, Vitest and Testing Library | ✅ done |
-| 2 | Typed API client, relay list, loading and failure states | ✅ done |
-| 3 | Relay switching, optimistic updates, refresh and polling | next |
-| 4 | Authentication against the hub's API key in production | |
-| 5 | Sensor readings and automation rules — the hub serves both since its phase 4 | |
-| 6 | Linting, formatting and CI | |
+| Phase | Scope                                                                        | Status  |
+| ----- | ---------------------------------------------------------------------------- | ------- |
+| 1     | Vite build, strict TypeScript, Vitest and Testing Library                    | ✅ done |
+| 2     | Typed API client, relay list, loading and failure states                     | ✅ done |
+| 3     | ESLint, Prettier and CI                                                      | ✅ done |
+| 4     | Relay switching, optimistic updates, refresh and polling                     | next    |
+| 5     | Authentication against the hub's API key in production                       |         |
+| 6     | Sensor readings and automation rules — the hub serves both since its phase 4 |         |
+| 7     | Users, roles and device administration                                       |         |
 
 ## License
 

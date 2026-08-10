@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
       // The hub is a separate origin and sends no CORS headers, by design.
       // Proxying keeps requests same-origin, so the client is written once and
       // needs no CORS-shaped special case that exists only in development.
-      proxy: hubProxy(env['PIHOME_HUB_ORIGIN'] ?? DEFAULT_HUB_ORIGIN, env['PIHOME_RELAY_API_KEY']),
+      proxy: hubProxy(env.PIHOME_HUB_ORIGIN ?? DEFAULT_HUB_ORIGIN, env.PIHOME_RELAY_API_KEY),
     },
 
     test: {
