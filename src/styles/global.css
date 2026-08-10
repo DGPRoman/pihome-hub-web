@@ -1,0 +1,61 @@
+/* Design tokens and the handful of element defaults worth overriding.
+   Everything else is scoped to a component through a CSS module. */
+
+:root {
+  --color-surface: #ffffff;
+  --color-surface-raised: #f4f5f7;
+  --color-border: #d8dbe0;
+  --color-text: #16181d;
+  --color-text-muted: #5c6270;
+  --color-accent: #1b6ef3;
+
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+
+  --radius: 0.5rem;
+
+  --font-sans:
+    system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-surface: #14161a;
+    --color-surface-raised: #1d2026;
+    --color-border: #2c3038;
+    --color-text: #eceef2;
+    --color-text-muted: #9aa1ae;
+    --color-accent: #4c8dff;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Respect a stated preference for less motion rather than assuming animation
+   is always welcome. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

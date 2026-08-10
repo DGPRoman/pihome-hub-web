@@ -1,0 +1,26 @@
+# Secrets and machine-specific configuration. Vite inlines every VITE_-prefixed
+# variable into the built bundle, so anything here is public by construction —
+# see README. Only the example template is tracked.
+.env
+.env.*
+!.env.example
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Tooling caches
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Logs
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
