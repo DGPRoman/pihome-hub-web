@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege: nothing here needs to write to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: 'true'
+
+jobs:
+  quality:
+    name: Lint, format and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs the lockfile exactly and
+      # fails if the manifest and lockfile disagree, which is the behaviour CI
+      # wants and a developer's machine does not.
+      - name: Install
+        run: npm ci
+
+      - name: Format check
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Ensure no secrets are tracked
+        # A committed credential cannot be un-published, so this is checked on
+        # every run rather than trusting .gitignore to stay correct.
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error file=.env::.env is tracked by git — it must never be committed"
+            exit 1
+          fi
+          echo "No .env in the index."
+
+  test:
+    name: Test (Node ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 24 is what .nvmrc pins and what development uses; 22 is the floor the
+        # manifest claims to support, and claiming it untested is worse than not
+        # claiming it.
+        node-version: ['22', '24']
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build, and verify no hub credential reached the bundle
+        # The README claims the hub's API key cannot reach the browser. Vite
+        # inlines VITE_-prefixed variables into the output, so that claim rests
+        # on a naming convention — which a future rename could break silently.
+        # Building with a canary value and grepping the output turns the claim
+        # into something CI enforces.
+        env:
+          PIHOME_RELAY_API_KEY: canary-must-never-be-bundled
+          PIHOME_HUB_ORIGIN: http://127.0.0.1:5002
+        run: |
+          npm run build
+          if grep -rq "canary-must-never-be-bundled" dist/; then
+            echo "::error::the hub API key reached the built bundle"
+            exit 1
+          fi
+          echo "No credential in dist/."

@@ -5,13 +5,7 @@
  * by matching on status codes or, worse, on message text.
  */
 export type HubErrorKind =
-  | 'offline'
-  | 'unauthorized'
-  | 'rate-limited'
-  | 'not-found'
-  | 'malformed'
-  | 'server'
-  | 'unexpected'
+  'offline' | 'unauthorized' | 'rate-limited' | 'not-found' | 'malformed' | 'server' | 'unexpected'
 
 /**
  * A request to the hub that did not produce usable data.

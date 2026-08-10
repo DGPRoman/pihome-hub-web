@@ -1,0 +1,4 @@
+# Generated or vendored: reformatting these produces noise, not clarity.
+dist/
+coverage/
+package-lock.json
