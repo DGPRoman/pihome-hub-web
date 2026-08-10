@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
+import { renderWithQuery } from '../testing/renderWithQuery'
 import { RelayList } from './RelayList'
 
 const RELAYS = [
@@ -9,26 +10,30 @@ const RELAYS = [
 ]
 
 describe('RelayList', () => {
-  it('lists every relay it was given', () => {
-    render(<RelayList relays={RELAYS} />)
+  it('renders one switch per relay it was given', () => {
+    renderWithQuery(<RelayList relays={RELAYS} />)
 
     expect(screen.getAllByRole('listitem')).toHaveLength(2)
-    expect(screen.getByText('Porch light')).toBeInTheDocument()
-    expect(screen.getByText('Gate light')).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Porch light' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
+    expect(screen.getByRole('switch', { name: 'Gate light' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
   })
 
-  it('states on and off in text, not by colour alone', () => {
-    render(<RelayList relays={RELAYS} />)
+  it('states on and off in text as well, not by colour alone', () => {
+    renderWithQuery(<RelayList relays={RELAYS} />)
 
-    // Queried through the accessibility tree: this is the same information a
-    // screen reader would announce, which is the point of asserting on it.
     const [porch, gate] = screen.getAllByRole('listitem')
     expect(porch).toHaveTextContent('On')
     expect(gate).toHaveTextContent('Off')
   })
 
   it('renders nothing but an empty list for no relays', () => {
-    render(<RelayList relays={[]} />)
+    renderWithQuery(<RelayList relays={[]} />)
 
     expect(screen.getByRole('list')).toBeEmptyDOMElement()
   })

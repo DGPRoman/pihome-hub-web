@@ -1,5 +1,7 @@
+import type { UseQueryResult } from '@tanstack/react-query'
+
 import type { Relay } from '../api/types'
-import { useRelays, type Async } from '../hooks/useRelays'
+import { useRelays } from '../hooks/useRelays'
 
 import { RelayList } from './RelayList'
 import styles from './RelayPanel.module.css'
@@ -15,43 +17,47 @@ export function RelayPanel() {
       <h2 id={HEADING_ID} className={styles.heading}>
         Relays
       </h2>
-      <PanelBody state={relays} />
+      <PanelBody query={relays} />
     </section>
   )
 }
 
-function PanelBody({ state }: { readonly state: Async<readonly Relay[]> }) {
-  switch (state.status) {
-    case 'loading':
-      // role="status" announces this politely, without interrupting; role="alert"
-      // below interrupts, which a failure has earned and a spinner has not.
-      return (
-        <p className={styles.note} role="status">
-          Reading relay state…
-        </p>
-      )
-
-    case 'failure':
-      return (
-        <p className={styles.error} role="alert">
-          {state.error.message}
-        </p>
-      )
-
-    case 'success':
-      return state.data.length === 0 ? (
-        <p className={styles.note}>No relays are configured on the hub.</p>
-      ) : (
-        <RelayList relays={state.data} />
-      )
-
-    default: {
-      // Unreachable while `Async` has exactly the three variants above — and
-      // that is the point. Add a fourth and this assignment stops compiling,
-      // here and at every other switch over the same union, which is a better
-      // reminder than a runtime fallback that silently renders nothing.
-      const unhandled: never = state
-      return unhandled
-    }
+function PanelBody({ query }: { readonly query: UseQueryResult<readonly Relay[]> }) {
+  // Data first, deliberately. A background poll that fails sets `status` to
+  // 'error' while the cached relays are still sitting there, so branching on
+  // status alone would blank a working list because one refresh went missing.
+  // The last known state, labelled as such, is more useful than nothing.
+  if (query.data !== undefined) {
+    return (
+      <>
+        {query.isError && (
+          <p className={styles.warning} role="alert">
+            {query.error.message} Showing the last state the hub reported.
+          </p>
+        )}
+        {query.data.length === 0 ? (
+          <p className={styles.note}>No relays are configured on the hub.</p>
+        ) : (
+          <RelayList relays={query.data} />
+        )}
+      </>
+    )
   }
+
+  // Nothing has ever arrived, so there is nothing to fall back to.
+  if (query.isError) {
+    return (
+      <p className={styles.error} role="alert">
+        {query.error.message}
+      </p>
+    )
+  }
+
+  // role="status" announces politely, without interrupting; the failures above
+  // use role="alert", which interrupts — a spinner has not earned that.
+  return (
+    <p className={styles.note} role="status">
+      Reading relay state…
+    </p>
+  )
 }
