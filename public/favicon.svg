@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A power glyph. Inline styles rather than an external stylesheet, since a
+       favicon is fetched on its own and cannot reach the page's CSS. -->
+  <style>
+    .mark {
+      fill: none;
+      stroke: #16181d;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+    @media (prefers-color-scheme: dark) {
+      .mark {
+        stroke: #eceef2;
+      }
+    }
+  </style>
+  <g class="mark">
+    <path d="M10.84 9.63 A 9 9 0 1 0 21.16 9.63" />
+    <path d="M16 6.5 V 16" />
+  </g>
+</svg>

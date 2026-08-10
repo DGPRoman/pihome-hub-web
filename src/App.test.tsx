@@ -1,18 +1,22 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import * as relaysApi from './api/relays'
 import { App } from './App'
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 describe('App', () => {
-  it('renders the application title', () => {
+  it('renders the application title and the relay section', () => {
+    // Stubbed because the panel fetches on mount. What each state looks like is
+    // RelayPanel's concern; this only asserts the shell puts it on the page.
+    vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([])
+
     render(<App />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'pihome-hub' })).toBeInTheDocument()
-  })
-
-  it('labels the relay section for assistive technology', () => {
-    render(<App />)
-
     expect(screen.getByRole('region', { name: 'Relays' })).toBeInTheDocument()
   })
 })

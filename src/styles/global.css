@@ -8,6 +8,10 @@
   --color-text: #16181d;
   --color-text-muted: #5c6270;
   --color-accent: #1b6ef3;
+  /* An energised circuit and a failed request. Both are always paired with
+     text, so neither carries meaning on its own. */
+  --color-on: #127a3d;
+  --color-danger: #b3261e;
 
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -30,6 +34,8 @@
     --color-text: #eceef2;
     --color-text-muted: #9aa1ae;
     --color-accent: #4c8dff;
+    --color-on: #4ac57e;
+    --color-danger: #f2837c;
   }
 }
 
