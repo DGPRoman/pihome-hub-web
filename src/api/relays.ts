@@ -1,7 +1,14 @@
-import { HubError, isAbortError } from './errors'
+import { asHubError, HubError, isAbortError } from './errors'
 import type { Relay } from './types'
 
 const RELAYS_PATH = '/v1/relays'
+
+/** What this module sends. Narrower than `RequestInit` so headers stay a plain object. */
+interface HubRequestInit {
+  readonly method: 'GET' | 'PUT'
+  readonly headers?: Record<string, string>
+  readonly body?: string
+}
 
 /**
  * Read every relay and its current state.
@@ -9,23 +16,86 @@ const RELAYS_PATH = '/v1/relays'
  * Same-origin by design: `npm run dev` proxies `/v1` to the hub, and in
  * production the hub serves this app. No base URL, and no API key — the client
  * never holds one. See README.
+ *
+ * Rejects with a `HubError`, or with the `AbortError` of a cancelled request.
  */
 export async function fetchRelays(signal: AbortSignal | null = null): Promise<readonly Relay[]> {
-  const response = await get(RELAYS_PATH, signal)
-  return parseRelayCollection(await readJson(response))
+  return onlyHubErrors(async () => {
+    const response = await request(RELAYS_PATH, { method: 'GET' }, signal)
+    return parseRelayCollection(await readJson(response))
+  })
 }
 
-async function get(path: string, signal: AbortSignal | null): Promise<Response> {
+/**
+ * Drive one relay to a state, and return the state the hub reports afterwards.
+ *
+ * `PUT` with the desired state rather than `POST /toggle`, even though a switch
+ * is conceptually a toggle. Toggling is not idempotent: two clicks that race, or
+ * one request retried after a timeout, leave the circuit in whichever state the
+ * requests happened to interleave into. Naming the wanted state means a replay
+ * is harmless, which matters more than brevity when the thing on the other end
+ * closes a mains circuit.
+ *
+ * Rejects with a `HubError`, or with the `AbortError` of a cancelled request.
+ */
+export async function setRelay(
+  id: string,
+  on: boolean,
+  signal: AbortSignal | null = null,
+): Promise<Relay> {
+  return onlyHubErrors(async () => {
+    const response = await request(
+      `${RELAYS_PATH}/${encodeURIComponent(id)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on }),
+      },
+      signal,
+    )
+    return parseRelay(await readJson(response))
+  })
+}
+
+/**
+ * Hold both public functions to one failure type.
+ *
+ * Everything raised deliberately below is already a `HubError`, but "already is"
+ * is an assumption, and the app types every query and mutation error as one. A
+ * stray `TypeError` from a bug here would otherwise arrive at a component
+ * claiming to have a `kind` it does not have.
+ */
+async function onlyHubErrors<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (cause) {
+    // An abort is the caller's own cleanup and must stay recognisable.
+    if (isAbortError(cause)) {
+      throw cause
+    }
+    throw asHubError(cause)
+  }
+}
+
+async function request(
+  path: string,
+  init: HubRequestInit,
+  signal: AbortSignal | null,
+): Promise<Response> {
   let response: Response
 
   try {
-    response = await fetch(path, { signal, headers: { Accept: 'application/json' } })
+    response = await fetch(path, {
+      method: init.method,
+      signal,
+      headers: { Accept: 'application/json', ...init.headers },
+      ...(init.body === undefined ? {} : { body: init.body }),
+    })
   } catch (cause) {
     // `fetch` rejects only when no answer arrived at all — DNS, a refused
     // connection, or an abort. It resolves for 401 and 500 alike, which is why
     // `response.ok` is checked separately below.
     if (isAbortError(cause)) {
-      // The caller cancelled this itself; reporting an outage would be a lie.
       throw cause
     }
     throw new HubError('offline', 'The hub did not answer. Is it running?')
@@ -43,6 +113,11 @@ function errorForStatus(status: number): HubError {
       return new HubError('unauthorized', 'The hub rejected the API key.', status)
     case 404:
       return new HubError('not-found', 'The hub has no record of that relay.', status)
+    case 422:
+      // The hub validates bodies strictly and guesses at nothing, so this means
+      // the client sent a shape it does not accept — a bug here, not something
+      // the reader can act on.
+      return new HubError('malformed', 'The hub rejected the request this app sent.', status)
     case 429:
       return new HubError(
         'rate-limited',
@@ -73,6 +148,13 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
+function malformed(): HubError {
+  return new HubError(
+    'malformed',
+    'The hub sent relay data in a shape this app does not recognise.',
+  )
+}
+
 function isRelay(value: unknown): value is Relay {
   if (typeof value !== 'object' || value === null) {
     return false
@@ -86,38 +168,37 @@ function isRelay(value: unknown): value is Relay {
 }
 
 /**
+ * Validate one relay object.
+ *
+ * Exported for its tests. Builds its own object rather than passing the parsed
+ * one through, so fields the client was not promised cannot ride along.
+ */
+export function parseRelay(body: unknown): Relay {
+  if (!isRelay(body)) {
+    throw malformed()
+  }
+  return { id: body.id, label: body.label, on: body.on }
+}
+
+/**
  * Validate a `GET /v1/relays` body and return the relays it contains.
  *
- * Exported for its tests. Types are erased at runtime, so asserting a shape
- * onto parsed JSON would only silence the compiler — a hub on a different
- * version, or a captive portal answering with a login page, would then surface
- * as `undefined` somewhere deep in a component. This checks instead, and builds
- * its own objects rather than passing the parsed ones through, so unrecognised
- * fields cannot ride along.
+ * Types are erased at runtime, so asserting a shape onto parsed JSON would only
+ * silence the compiler — a hub on a different version, or a captive portal
+ * answering with a login page, would then surface as `undefined` somewhere deep
+ * in a component. This checks instead.
  */
 export function parseRelayCollection(body: unknown): readonly Relay[] {
-  const malformed = new HubError(
-    'malformed',
-    'The hub sent relay data in a shape this app does not recognise.',
-  )
-
   if (typeof body !== 'object' || body === null || !('relays' in body)) {
-    throw malformed
+    throw malformed()
   }
 
   // No assertion needed: the `in` check above narrowed `body` to something
   // known to carry a `relays` key, so destructuring yields `unknown`.
   const { relays } = body
   if (!Array.isArray(relays)) {
-    throw malformed
+    throw malformed()
   }
 
-  const parsed: Relay[] = []
-  for (const item of relays) {
-    if (!isRelay(item)) {
-      throw malformed
-    }
-    parsed.push({ id: item.id, label: item.label, on: item.on })
-  }
-  return parsed
+  return relays.map((relay: unknown) => parseRelay(relay))
 }
