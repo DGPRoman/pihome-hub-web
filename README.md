@@ -3,11 +3,13 @@
 Web interface for [pihome-hub](https://github.com/DGPRoman/pihome-hub), the HTTP control
 plane for a Raspberry Pi wired to relay-switched circuits.
 
-The hub speaks a small REST API. This is the browser client for it: a page that shows every
-relay and switches it, and shows what the sensors last reported, without reaching for `curl`.
+The hub speaks a small REST API. This is the browser client for it: a page that switches the
+relays, shows what the sensors last reported, and lists the rules wiring the two together —
+without reaching for `curl`.
 
-> **Status: early, and development-only.** Relays and sensors work, with polling, optimistic
-> writes and honest failure states. There is no production deployment yet: the hub serves no
+> **Status: early, and development-only.** Relays, sensors and automation rules work, with
+> polling, optimistic writes and honest failure states. There is no production deployment yet:
+> the hub serves no
 > static files, so nothing hosts this bundle, and the browser is authenticated only by the dev
 > proxy. Both are the next problems — see [Roadmap](#roadmap).
 
@@ -157,12 +159,14 @@ src/
 │   ├── errors.ts               HubError and its closed set of causes
 │   ├── http.ts                 one request path, one failure type
 │   ├── relays.ts               GET and PUT, with runtime validation
-│   └── sensors.ts              GET, with runtime validation and wire mapping
+│   ├── sensors.ts              GET, with runtime validation and wire mapping
+│   └── automation.ts           GET, the configured rules
 ├── hooks/
 │   ├── queryKeys.ts            cache keys, shared by query and mutation
 │   ├── useRelays.ts            the relay read
 │   ├── useSetRelay.ts          the relay write, optimistic with rollback
-│   └── useSensors.ts           the sensor read
+│   ├── useSensors.ts           the sensor read
+│   └── useRules.ts             the automation read
 ├── components/
 │   ├── DataPanel.tsx           loading, failure, stale and empty, once for all sections
 │   ├── RelayPanel.tsx          the relay section
@@ -170,7 +174,10 @@ src/
 │   ├── RelayRow.tsx            one relay, as an accessible switch
 │   ├── SensorPanel.tsx         the sensor section
 │   ├── SensorList.tsx          the sensor list
-│   └── SensorRow.tsx           one device: readings, freshness, or neither
+│   ├── SensorRow.tsx           one device: readings, freshness, or neither
+│   ├── RulePanel.tsx           the automation section
+│   ├── RuleList.tsx            the rule list
+│   └── RuleRow.tsx             one rule, in a sentence
 ├── lib/
 │   └── time.ts                 relative times, as a pure function of two instants
 ├── styles/
@@ -188,16 +195,16 @@ Each component sits beside its own `.module.css` and `.test.tsx`.
 
 ## Roadmap
 
-| Phase | Scope                                                                  | Status  |
-| ----- | ---------------------------------------------------------------------- | ------- |
-| 1     | Vite build, strict TypeScript, Vitest and Testing Library              | ✅ done |
-| 2     | Typed API client, relay list, loading and failure states               | ✅ done |
-| 3     | ESLint, Prettier and CI                                                | ✅ done |
-| 4     | Relay switching, optimistic writes, polling                            | ✅ done |
-| 5     | Sensor readings, staleness, wire-format mapping                        | ✅ done |
-| 6     | Automation rules — the hub evaluates them but does not yet expose them | next    |
-| 7     | Getting this served somewhere, and authenticating a real browser       | blocked |
-| 8     | Users, roles and device administration                                 | blocked |
+| Phase | Scope                                                            | Status  |
+| ----- | ---------------------------------------------------------------- | ------- |
+| 1     | Vite build, strict TypeScript, Vitest and Testing Library        | ✅ done |
+| 2     | Typed API client, relay list, loading and failure states         | ✅ done |
+| 3     | ESLint, Prettier and CI                                          | ✅ done |
+| 4     | Relay switching, optimistic writes, polling                      | ✅ done |
+| 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done |
+| 6     | Automation rules, read-only                                      | ✅ done |
+| 7     | Getting this served somewhere, and authenticating a real browser | blocked |
+| 8     | Users, roles and device administration                           | blocked |
 
 Sensors moved ahead of authentication because authentication turned out to have nothing to
 build against. Phases 7 and 8 need the hub to grow first: it serves no static files, holds two
