@@ -9,3 +9,7 @@
 export const relayKeys = {
   all: ['relays'] as const,
 }
+
+export const sensorKeys = {
+  all: ['sensors'] as const,
+}
