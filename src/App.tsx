@@ -1,5 +1,6 @@
 import styles from './App.module.css'
 import { RelayPanel } from './components/RelayPanel'
+import { RulePanel } from './components/RulePanel'
 import { SensorPanel } from './components/SensorPanel'
 
 /** Application shell. Sections own their own data. */
@@ -12,6 +13,7 @@ export function App() {
 
       <RelayPanel />
       <SensorPanel />
+      <RulePanel />
     </main>
   )
 }

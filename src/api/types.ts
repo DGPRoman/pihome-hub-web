@@ -25,6 +25,23 @@ export interface Relay {
  * nothing displays them, and inventing fields ahead of a use for them is how a
  * type stops describing anything.
  */
+/** One automation rule, as the hub reports it. Mirrors `AutomationRule` in its v1 schema. */
+export interface AutomationRule {
+  readonly id: string
+  readonly enabled: boolean
+  readonly onlyAfterDark: boolean
+  readonly when: {
+    readonly device: string
+    readonly motion: boolean
+  }
+  readonly then: {
+    readonly relay: string
+    readonly state: 'on' | 'off'
+    /** Revert after this many seconds; `null` means the state is left in place. */
+    readonly holdSeconds: number | null
+  }
+}
+
 export interface Sensor {
   readonly id: string
   readonly label: string
