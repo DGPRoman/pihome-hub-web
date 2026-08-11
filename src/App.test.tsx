@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import * as relaysApi from './api/relays'
+import * as sensorsApi from './api/sensors'
 import { App } from './App'
 import { renderWithQuery } from './testing/renderWithQuery'
 
@@ -10,14 +11,16 @@ afterEach(() => {
 })
 
 describe('App', () => {
-  it('renders the application title and the relay section', () => {
-    // Stubbed because the panel reads on mount. What each state looks like is
-    // RelayPanel's concern; this only asserts the shell puts it on the page.
+  it('renders the title and one labelled region per section', () => {
+    // Stubbed because both panels read on mount. What each state looks like is
+    // the panels' concern; this only asserts the shell puts them on the page.
     vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([])
+    vi.spyOn(sensorsApi, 'fetchSensors').mockResolvedValue([])
 
     renderWithQuery(<App />)
 
     expect(screen.getByRole('heading', { level: 1, name: 'pihome-hub' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Relays' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Sensors' })).toBeInTheDocument()
   })
 })
