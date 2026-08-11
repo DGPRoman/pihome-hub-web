@@ -181,7 +181,8 @@ src/
 ├── lib/
 │   └── time.ts                 relative times, as a pure function of two instants
 ├── styles/
-│   └── global.css              design tokens and element defaults
+│   ├── global.css              design tokens and element defaults
+│   └── list.module.css         the row container every section shares
 └── testing/
     └── renderWithQuery.tsx     render helper providing a fresh cache
 index.html                      the page Vite serves and builds
@@ -191,7 +192,8 @@ public/favicon.svg              theme-aware favicon
 .github/workflows/ci.yml        format, lint, types, tests, build
 ```
 
-Each component sits beside its own `.module.css` and `.test.tsx`.
+Each component sits beside its own `.test.tsx`, and beside its own `.module.css` unless the
+styles are genuinely shared.
 
 ## Roadmap
 

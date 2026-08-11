@@ -1,6 +1,7 @@
 import type { Sensor } from '../api/types'
 
-import styles from './SensorList.module.css'
+import styles from '../styles/list.module.css'
+
 import { SensorRow } from './SensorRow'
 
 interface SensorListProps {

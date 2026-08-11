@@ -1,6 +1,7 @@
 import type { AutomationRule } from '../api/types'
 
-import styles from './RuleList.module.css'
+import styles from '../styles/list.module.css'
+
 import { RuleRow } from './RuleRow'
 
 interface RuleListProps {

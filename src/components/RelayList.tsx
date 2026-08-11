@@ -1,6 +1,7 @@
 import type { Relay } from '../api/types'
 
-import styles from './RelayList.module.css'
+import styles from '../styles/list.module.css'
+
 import { RelayRow } from './RelayRow'
 
 interface RelayListProps {
