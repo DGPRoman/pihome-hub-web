@@ -10,6 +10,8 @@ interface DataPanelProps<T> {
   readonly loadingMessage: string
   readonly emptyMessage: string
   readonly isEmpty: (data: T) => boolean
+  /** Optional control beside the heading, for whatever acts on the section as a whole. */
+  readonly action?: ReactNode
   /** Renders the data. Only called once there is data to render. */
   readonly children: (data: T) => ReactNode
 }
@@ -27,6 +29,7 @@ export function DataPanel<T>({
   loadingMessage,
   emptyMessage,
   isEmpty,
+  action,
   children,
 }: DataPanelProps<T>) {
   // Generated rather than hardcoded, so two panels on one page cannot collide on
@@ -35,9 +38,14 @@ export function DataPanel<T>({
 
   return (
     <section className={styles.panel} aria-labelledby={headingId}>
-      <h2 id={headingId} className={styles.heading}>
-        {heading}
-      </h2>
+      {/* The action sits outside the boundary below: a control over the whole
+          section should survive the contents it acts on. */}
+      <div className={styles.header}>
+        <h2 id={headingId} className={styles.heading}>
+          {heading}
+        </h2>
+        {action}
+      </div>
       {/* Inside the section, so a crash keeps its heading and the sections beside
           it keep working. Which is the whole point: a bug in the sensor rows must
           not take away the switch for the porch light. */}
