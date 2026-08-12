@@ -59,6 +59,14 @@ key and a malformed body are distinguishable, both to code and on screen. Nothin
 empty list to mean "we could not tell". A poll that fails over data already on screen shows a
 warning above the last known state rather than blanking a working list.
 
+**A crash stays in the section it happened in.** A component that throws while rendering
+unmounts the entire tree above it, so one bad row would otherwise take the page down and
+the relays with it. Each section renders inside an error boundary, which reports the
+reason in place and keeps its heading, leaving the sections beside it usable — being
+unable to read the automation rules is no reason to lose the switch for the porch light.
+It does not clear itself when the next poll arrives: re-rendering whatever just threw
+would loop against a crash that is not transient, so recovery is a button.
+
 **Strict types, matching the backend.** The hub type-checks under `mypy --strict`. This side
 runs TypeScript with `strict` plus `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`,
 and lints with type-aware rules, so the client is not the loose half of the pair.
@@ -169,6 +177,7 @@ src/
 │   └── useRules.ts             the automation read
 ├── components/
 │   ├── DataPanel.tsx           loading, failure, stale and empty, once for all sections
+│   ├── ErrorBoundary.tsx       contains a rendering crash to one section
 │   ├── RelayPanel.tsx          the relay section
 │   ├── RelayList.tsx           the relay list
 │   ├── RelayRow.tsx            one relay, as an accessible switch
