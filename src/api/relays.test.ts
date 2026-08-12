@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { HubError } from './errors'
-import { fetchRelays, parseRelay, parseRelayCollection, setRelay } from './relays'
+import { fetchRelays, parseRelay, parseRelayCollection, setAllRelays, setRelay } from './relays'
 
 const ONE_RELAY = { id: 'porch-light', label: 'Porch light', on: false }
 
@@ -176,5 +176,33 @@ describe('setRelay', () => {
     stubFetch(jsonResponse({ detail: 'validation error' }, 422))
 
     await expect(rejectionKind(setRelay('porch-light', true))).resolves.toBe('malformed')
+  })
+})
+
+describe('setAllRelays', () => {
+  it('returns every relay the hub reports after the write', async () => {
+    stubFetch(jsonResponse({ relays: [{ ...ONE_RELAY, on: false }] }))
+
+    await expect(setAllRelays(false)).resolves.toEqual([{ ...ONE_RELAY, on: false }])
+  })
+
+  it('PUTs the collection rather than posting to the toggle-all endpoint', async () => {
+    // Toggle-all inverts each relay independently, so replaying it against a
+    // half-lit house lands somewhere different every time.
+    const fetchMock = stubFetch(jsonResponse({ relays: [] }))
+
+    await setAllRelays(false)
+
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/v1/relays')
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      method: 'PUT',
+      body: JSON.stringify({ on: false }),
+    })
+  })
+
+  it('reports a rejected key as unauthorized rather than as an empty house', async () => {
+    stubFetch(jsonResponse({ detail: 'invalid API key' }, 401))
+
+    await expect(rejectionKind(setAllRelays(false))).resolves.toBe('unauthorized')
   })
 })

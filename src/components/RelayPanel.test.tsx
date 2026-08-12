@@ -10,14 +10,22 @@ import { RelayPanel } from './RelayPanel'
 
 const PORCH_OFF = { id: 'porch-light', label: 'Porch light', on: false }
 const GATE_OFF = { id: 'gate-light', label: 'Gate light', on: false }
+const PORCH_ON = { ...PORCH_OFF, on: true }
+const GATE_ON = { ...GATE_OFF, on: true }
 
 /** A promise the test settles by hand, to hold a request in flight. */
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+function deferred<T>(): {
+  promise: Promise<T>
+  resolve: (value: T) => void
+  reject: (reason: unknown) => void
+} {
   let resolve!: (value: T) => void
-  const promise = new Promise<T>((settle) => {
+  let reject!: (reason: unknown) => void
+  const promise = new Promise<T>((settle, fail) => {
     resolve = settle
+    reject = fail
   })
-  return { promise, resolve }
+  return { promise, resolve, reject }
 }
 
 afterEach(() => {
@@ -94,20 +102,28 @@ describe('RelayPanel', () => {
   })
 
   it('does not leave the switch flipped when the hub refuses the write', async () => {
-    vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF])
-    vi.spyOn(relaysApi, 'setRelay').mockRejectedValue(
-      new HubError('rate-limited', 'The hub is refusing further attempts for now.', 429),
-    )
+    // Both requests are driven by hand. The reconciling read is never answered, so
+    // the state this ends on can only have come from the snapshot — letting it
+    // answer would restore the switch by itself and the test would pass with the
+    // rollback deleted.
+    const fetch = vi.spyOn(relaysApi, 'fetchRelays')
+    fetch.mockResolvedValueOnce([PORCH_OFF])
+    fetch.mockReturnValue(deferred<readonly Relay[]>().promise)
+    const write = deferred<Relay>()
+    vi.spyOn(relaysApi, 'setRelay').mockReturnValue(write.promise)
 
     renderWithQuery(<RelayPanel />)
     await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('refusing further attempts')
+    const porch = () => screen.getByRole('switch', { name: 'Porch light' })
     await waitFor(() => {
-      expect(screen.getByRole('switch', { name: 'Porch light' })).toHaveAttribute(
-        'aria-checked',
-        'false',
-      )
+      expect(porch()).toHaveAttribute('aria-checked', 'true')
+    })
+
+    write.reject(new HubError('rate-limited', 'The hub is refusing further attempts for now.', 429))
+
+    await waitFor(() => {
+      expect(porch()).toHaveAttribute('aria-checked', 'false')
     })
   })
 
@@ -124,6 +140,60 @@ describe('RelayPanel', () => {
       expect(screen.getByRole('switch', { name: 'Porch light' })).toBeDisabled()
     })
     expect(screen.getByRole('switch', { name: 'Gate light' })).toBeEnabled()
+  })
+
+  it('offers no bulk control until the hub has said what there is to switch off', () => {
+    vi.spyOn(relaysApi, 'fetchRelays').mockReturnValue(deferred<readonly Relay[]>().promise)
+
+    renderWithQuery(<RelayPanel />)
+
+    expect(screen.queryByRole('button', { name: 'All off' })).not.toBeInTheDocument()
+  })
+
+  it('opens every relay before the hub has confirmed it', async () => {
+    vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_ON, GATE_ON])
+    const write = deferred<readonly Relay[]>()
+    vi.spyOn(relaysApi, 'setAllRelays').mockReturnValue(write.promise)
+
+    renderWithQuery(<RelayPanel />)
+    await userEvent.click(await screen.findByRole('button', { name: 'All off' }))
+
+    await waitFor(() => {
+      for (const control of screen.getAllByRole('switch')) {
+        expect(control).toHaveAttribute('aria-checked', 'false')
+      }
+    })
+
+    write.resolve([PORCH_OFF, GATE_OFF])
+  })
+
+  it('leaves every relay as it was when the hub refuses the bulk write', async () => {
+    const fetch = vi.spyOn(relaysApi, 'fetchRelays')
+    fetch.mockResolvedValueOnce([PORCH_ON, GATE_OFF])
+    fetch.mockReturnValue(deferred<readonly Relay[]>().promise)
+    const write = deferred<readonly Relay[]>()
+    vi.spyOn(relaysApi, 'setAllRelays').mockReturnValue(write.promise)
+
+    renderWithQuery(<RelayPanel />)
+    await userEvent.click(await screen.findByRole('button', { name: 'All off' }))
+
+    const porch = () => screen.getByRole('switch', { name: 'Porch light' })
+    await waitFor(() => {
+      expect(porch()).toHaveAttribute('aria-checked', 'false')
+    })
+
+    write.reject(new HubError('rate-limited', 'The hub is refusing further attempts for now.', 429))
+
+    // The snapshot goes back whole, so the porch light returns to on. A rollback
+    // that inverted instead would be wrong for the gate light, which was already
+    // off before the button was pressed.
+    await waitFor(() => {
+      expect(porch()).toHaveAttribute('aria-checked', 'true')
+    })
+    expect(screen.getByRole('switch', { name: 'Gate light' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
   })
 
   it('keeps showing the last known state when a refresh fails', async () => {

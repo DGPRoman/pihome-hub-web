@@ -49,6 +49,13 @@ Toggling is not idempotent: two clicks that race, or one request retried after a
 leave the circuit wherever the requests happened to interleave. Naming the wanted state makes
 a replay harmless, which matters more than brevity when the far end closes a mains circuit.
 
+**The bulk control only goes one way.** The hub takes either state for every relay at
+once, but only "all off" is offered. One button that closes every mains circuit in the
+house serves no moment anyone actually has, while switching everything off on the way out
+is the reason the control exists at all. It also goes out as `PUT` with the wanted state
+rather than the hub's toggle-all, which inverts each relay independently — replaying that
+against a half-lit house lands somewhere different every time.
+
 **A switch moves before the hub confirms.** The cache is written first and reconciled after,
 so pressing a switch feels immediate. The write is undone from a snapshot if the hub refuses,
 in-flight reads are cancelled first so a stale poll cannot spring the switch back, and the
@@ -166,19 +173,21 @@ src/
 │   ├── types.ts                Relay and Sensor — the app's own shapes
 │   ├── errors.ts               HubError and its closed set of causes
 │   ├── http.ts                 one request path, one failure type
-│   ├── relays.ts               GET and PUT, with runtime validation
+│   ├── relays.ts               GET and PUT, one relay or all, with runtime validation
 │   ├── sensors.ts              GET, with runtime validation and wire mapping
 │   └── automation.ts           GET, the configured rules
 ├── hooks/
 │   ├── queryKeys.ts            cache keys, shared by query and mutation
 │   ├── useRelays.ts            the relay read
 │   ├── useSetRelay.ts          the relay write, optimistic with rollback
+│   ├── useSetAllRelays.ts      the same, for every relay at once
 │   ├── useSensors.ts           the sensor read
 │   └── useRules.ts             the automation read
 ├── components/
 │   ├── DataPanel.tsx           loading, failure, stale and empty, once for all sections
 │   ├── ErrorBoundary.tsx       contains a rendering crash to one section
 │   ├── RelayPanel.tsx          the relay section
+│   ├── AllOffButton.tsx        opens every relay, for leaving the house
 │   ├── RelayList.tsx           the relay list
 │   ├── RelayRow.tsx            one relay, as an accessible switch
 │   ├── SensorPanel.tsx         the sensor section

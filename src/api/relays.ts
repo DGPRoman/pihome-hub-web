@@ -46,6 +46,33 @@ export async function setRelay(
   })
 }
 
+/**
+ * Drive every relay to one state, and return the states the hub reports afterwards.
+ *
+ * `PUT` for the same reason `setRelay` uses it, and more so: `POST /v1/relays/toggle`
+ * inverts each relay independently, so replaying it against a house that is half on
+ * lands somewhere different every time.
+ *
+ * Rejects with a `HubError`, or with the `AbortError` of a cancelled request.
+ */
+export async function setAllRelays(
+  on: boolean,
+  signal: AbortSignal | null = null,
+): Promise<readonly Relay[]> {
+  return onlyHubErrors(async () => {
+    const response = await hubRequest(
+      RELAYS_PATH,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ on }),
+      },
+      signal,
+    )
+    return parseRelayCollection(await readJson(response))
+  })
+}
+
 function isRelay(value: unknown): value is Relay {
   if (!isRecord(value)) {
     return false
