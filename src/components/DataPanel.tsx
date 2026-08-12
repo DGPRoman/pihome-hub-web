@@ -2,6 +2,7 @@ import type { UseQueryResult } from '@tanstack/react-query'
 import { useId, type ReactNode } from 'react'
 
 import styles from './DataPanel.module.css'
+import { ErrorBoundary } from './ErrorBoundary'
 
 interface DataPanelProps<T> {
   readonly heading: string
@@ -37,14 +38,19 @@ export function DataPanel<T>({
       <h2 id={headingId} className={styles.heading}>
         {heading}
       </h2>
-      <Body
-        query={query}
-        loadingMessage={loadingMessage}
-        emptyMessage={emptyMessage}
-        isEmpty={isEmpty}
-      >
-        {children}
-      </Body>
+      {/* Inside the section, so a crash keeps its heading and the sections beside
+          it keep working. Which is the whole point: a bug in the sensor rows must
+          not take away the switch for the porch light. */}
+      <ErrorBoundary>
+        <Body
+          query={query}
+          loadingMessage={loadingMessage}
+          emptyMessage={emptyMessage}
+          isEmpty={isEmpty}
+        >
+          {children}
+        </Body>
+      </ErrorBoundary>
     </section>
   )
 }
