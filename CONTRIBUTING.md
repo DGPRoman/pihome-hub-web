@@ -8,17 +8,17 @@ Subjects follow [Conventional Commits](https://www.conventionalcommits.org):
 type(optional-scope)!: description
 ```
 
-Bodies do not change. This repository has always explained *why* a change is
+Bodies do not change. This repository has always explained _why_ a change is
 right rather than restating the diff, and that is the part worth keeping — the
 subject line simply gains a prefix that a tool can read.
 
-| Part | Rule |
-| --- | --- |
-| `type` | one of `build` `chore` `ci` `docs` `feat` `fix` `perf` `refactor` `revert` `style` `test` |
-| `scope` | optional, lower case: `api` `components` `hooks` `lib` `styles` `testing` `build` `deps` `ci` |
-| `!` | append to the type or scope for a breaking change, and explain it in a `BREAKING CHANGE:` footer |
-| `description` | lower case, imperative, no trailing full stop, whole subject within 72 characters |
-| body | separated by one blank line, wrapped at 72, present for anything not self-evident |
+| Part          | Rule                                                                                             |
+| ------------- | ------------------------------------------------------------------------------------------------ |
+| `type`        | one of `build` `chore` `ci` `docs` `feat` `fix` `perf` `refactor` `revert` `style` `test`        |
+| `scope`       | optional, lower case: `api` `components` `hooks` `lib` `styles` `testing` `build` `deps` `ci`    |
+| `!`           | append to the type or scope for a breaking change, and explain it in a `BREAKING CHANGE:` footer |
+| `description` | lower case, imperative, no trailing full stop, whole subject within 72 characters                |
+| body          | separated by one blank line, wrapped at 72, present for anything not self-evident                |
 
 Footers, where they apply: `Fixes: #123`, `Refs: #123`, `BREAKING CHANGE: ...`.
 
