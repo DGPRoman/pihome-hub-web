@@ -12,7 +12,11 @@ export interface SetRelayInput {
 
 /** What `onMutate` hands to `onError` so a failure can be undone. */
 interface Rollback {
-  readonly previous: readonly Relay[] | undefined
+  /** This relay's state before the write, or undefined if it was not in the cache. */
+  readonly previous: boolean | undefined
+
+  /** What this mutation wrote, so a rollback can recognise its own handiwork. */
+  readonly wrote: boolean
 }
 
 /**
@@ -34,7 +38,12 @@ export function useSetRelay() {
       // making the switch appear to spring back on its own.
       await queryClient.cancelQueries({ queryKey: relayKeys.all })
 
-      const previous = queryClient.getQueryData<readonly Relay[]>(relayKeys.all)
+      // One relay's state, not the whole collection. A snapshot of the list would
+      // also capture whatever another in-flight write had optimistically put
+      // there, and restoring it later would reinstate that write's guess.
+      const previous = queryClient
+        .getQueryData<readonly Relay[]>(relayKeys.all)
+        ?.find((relay) => relay.id === id)?.on
 
       queryClient.setQueryData<readonly Relay[]>(relayKeys.all, (current) =>
         current?.map((relay) => (relay.id === id ? { ...relay, on } : relay)),
@@ -42,20 +51,30 @@ export function useSetRelay() {
 
       // Returned as context, not stashed in a variable outside: several rows can
       // be mid-flight at once, and each needs its own snapshot to undo.
-      return { previous }
+      return { previous, wrote: on }
     },
 
-    onError: (_error, _input, context) => {
-      // Restore exactly what was there. Flipping the relay back instead would be
-      // wrong whenever the hub had already moved it for another reason.
-      if (context?.previous !== undefined) {
-        queryClient.setQueryData(relayKeys.all, context.previous)
+    onError: (_error, { id }, context) => {
+      if (context?.previous === undefined) {
+        return
       }
+      const { previous, wrote } = context
+
+      // Undone only where the cache still holds what this mutation put there.
+      // Anything else means something spoke more recently — a reconciling read,
+      // or another write — and its value is better than this one's memory of the
+      // past. Writing the snapshot back unconditionally is how two overlapping
+      // failures used to settle on a combination the hub never reported.
+      queryClient.setQueryData<readonly Relay[]>(relayKeys.all, (current) =>
+        current?.map((relay) =>
+          relay.id === id && relay.on === wrote ? { ...relay, on: previous } : relay,
+        ),
+      )
     },
 
     // Reconcile with the hub either way. On success the optimistic value is
     // probably right but is still a guess; on failure the rollback restored a
-    // snapshot that may itself be stale.
+    // value that may itself be stale.
     //
     // Deliberately not returned. The mutation core awaits whatever `onSettled`
     // gives back before dispatching the terminal state, so returning this left

@@ -184,9 +184,9 @@ describe('RelayPanel', () => {
 
     write.reject(new HubError('rate-limited', 'The hub is refusing further attempts for now.', 429))
 
-    // The snapshot goes back whole, so the porch light returns to on. A rollback
-    // that inverted instead would be wrong for the gate light, which was already
-    // off before the button was pressed.
+    // Each relay goes back to what it held before the button was pressed, so the
+    // porch light returns to on. A rollback that inverted instead would be wrong
+    // for the gate light, which was already off.
     await waitFor(() => {
       expect(porch()).toHaveAttribute('aria-checked', 'true')
     })
@@ -218,6 +218,40 @@ describe('RelayPanel', () => {
     await waitFor(() => {
       expect(screen.getByRole('switch', { name: 'Porch light' })).toBeEnabled()
     })
+  })
+
+  it('invents no state when two refused writes overlap', async () => {
+    const fetch = vi.spyOn(relaysApi, 'fetchRelays')
+    fetch.mockResolvedValueOnce([PORCH_ON, GATE_ON])
+    // Deliberately never answered. A reconciling read would paper over this, and
+    // it is exactly what cannot be relied on in the case that causes it.
+    fetch.mockReturnValue(deferred<readonly Relay[]>().promise)
+    const one = deferred<Relay>()
+    const all = deferred<readonly Relay[]>()
+    vi.spyOn(relaysApi, 'setRelay').mockReturnValue(one.promise)
+    vi.spyOn(relaysApi, 'setAllRelays').mockReturnValue(all.promise)
+
+    renderWithQuery(<RelayPanel />)
+    await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
+    await userEvent.click(screen.getByRole('button', { name: 'All off' }))
+
+    const refused = () => new HubError('server', 'The hub could not complete the request.', 500)
+    one.reject(refused())
+    all.reject(refused())
+
+    // The hub reported both on and refused both writes, so both must read on.
+    // Restoring each snapshot whole used to settle on porch off and gate on — a
+    // combination the hub never reported, under a banner claiming it had.
+    await waitFor(() => {
+      expect(screen.getByRole('switch', { name: 'Porch light' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      )
+    })
+    expect(screen.getByRole('switch', { name: 'Gate light' })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    )
   })
 
   it('keeps showing the last known state when a refresh fails', async () => {

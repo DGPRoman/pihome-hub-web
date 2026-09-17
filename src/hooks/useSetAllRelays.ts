@@ -7,7 +7,11 @@ import { relayKeys } from './queryKeys'
 
 /** What `onMutate` hands to `onError` so a failure can be undone. */
 interface Rollback {
-  readonly previous: readonly Relay[] | undefined
+  /** Each relay's state before the write, by id. */
+  readonly previous: ReadonlyMap<string, boolean>
+
+  /** What this mutation wrote, so a rollback can recognise its own handiwork. */
+  readonly wrote: boolean
 }
 
 /**
@@ -25,21 +29,35 @@ export function useSetAllRelays() {
 
     onMutate: async (on) => {
       await queryClient.cancelQueries({ queryKey: relayKeys.all })
-      const previous = queryClient.getQueryData<readonly Relay[]>(relayKeys.all)
 
-      queryClient.setQueryData<readonly Relay[]>(relayKeys.all, (current) =>
-        current?.map((relay) => ({ ...relay, on })),
+      const current = queryClient.getQueryData<readonly Relay[]>(relayKeys.all)
+      const previous = new Map(current?.map((relay) => [relay.id, relay.on]) ?? [])
+
+      queryClient.setQueryData<readonly Relay[]>(relayKeys.all, (list) =>
+        list?.map((relay) => ({ ...relay, on })),
       )
 
-      return { previous }
+      return { previous, wrote: on }
     },
 
     onError: (_error, _on, context) => {
-      // The whole snapshot, because the whole list was overwritten. A partial
-      // failure is the hub's to report; the client does not guess which half moved.
-      if (context?.previous !== undefined) {
-        queryClient.setQueryData(relayKeys.all, context.previous)
+      if (context === undefined) {
+        return
       }
+      const { previous, wrote } = context
+
+      // Per relay, and only where the cache still holds what this mutation put
+      // there. Restoring the collection wholesale reinstated whatever another
+      // in-flight write had optimistically written before this one snapshotted
+      // it, which is how two overlapping failures settled on a combination the
+      // hub never reported. A partial failure remains the hub's to report; the
+      // client still does not guess which half moved.
+      queryClient.setQueryData<readonly Relay[]>(relayKeys.all, (list) =>
+        list?.map((relay) => {
+          const before = previous.get(relay.id)
+          return before !== undefined && relay.on === wrote ? { ...relay, on: before } : relay
+        }),
+      )
     },
 
     // Not returned: see useSetRelay.
