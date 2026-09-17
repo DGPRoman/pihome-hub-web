@@ -1,6 +1,6 @@
 import { QueryClient } from '@tanstack/react-query'
 
-import type { HubError } from './api/errors'
+import type { HubError, HubErrorKind } from './api/errors'
 
 /**
  * Tell TanStack Query what an error is in this app.
@@ -18,7 +18,7 @@ declare module '@tanstack/react-query' {
 }
 
 /** How long a relay read is treated as fresh enough to reuse without refetching. */
-const STALE_TIME_MS = 2_000
+export const STALE_TIME_MS = 2_000
 
 /**
  * How often to re-read relay state while the page is open.
@@ -27,9 +27,17 @@ const STALE_TIME_MS = 2_000
  * on sensor readings, and someone else may be holding a phone. Without polling
  * the page would quietly drift out of date and look authoritative while doing it.
  */
-const POLL_INTERVAL_MS = 10_000
+export const POLL_INTERVAL_MS = 10_000
 
-const MAX_RETRIES = 2
+export const MAX_RETRIES = 2
+
+/**
+ * Failures worth a second attempt.
+ *
+ * A Set rather than a chain of comparisons so that adding a kind to HubErrorKind
+ * is a decision made here rather than one made by omission.
+ */
+const RETRYABLE: ReadonlySet<HubErrorKind> = new Set(['offline', 'server', 'timeout'])
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -40,8 +48,10 @@ export function createQueryClient(): QueryClient {
         // Retrying a rejected key or an unknown relay just repeats the same
         // answer more slowly. Only a hub that did not answer, or one that failed
         // in a way it might not fail again, is worth a second attempt.
-        retry: (failureCount, error) =>
-          failureCount < MAX_RETRIES && (error.kind === 'offline' || error.kind === 'server'),
+        //
+        // A timeout belongs in that set: something is listening, and a Pi part way
+        // through a reboot answers the connection before it can answer the request.
+        retry: (failureCount, error) => failureCount < MAX_RETRIES && RETRYABLE.has(error.kind),
       },
       mutations: {
         // A write is never retried automatically. `PUT` is idempotent, so a retry
