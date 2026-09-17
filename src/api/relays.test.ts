@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { HubError } from './errors'
+import { REQUEST_TIMEOUT_MS } from './http'
 import { fetchRelays, parseRelay, parseRelayCollection, setAllRelays, setRelay } from './relays'
 
 const ONE_RELAY = { id: 'porch-light', label: 'Porch light', on: false }
@@ -126,13 +127,93 @@ describe('fetchRelays', () => {
     await expect(fetchRelays()).rejects.toBe(abort)
   })
 
-  it('passes the signal to fetch so a request can be cancelled', async () => {
-    const fetchMock = stubFetch(jsonResponse({ relays: [] }))
-    const { signal } = new AbortController()
+  it('gives up on a hub that accepts the connection and never answers', async () => {
+    // The failure a home network actually produces. A Pi part way through a reboot
+    // completes the TCP handshake and then says nothing, which without a deadline
+    // is indistinguishable from a slow answer — the request simply never settles.
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (_input: string, init?: RequestInit) =>
+            new Promise<Response>((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => {
+                reject(new DOMException('The operation was aborted.', 'AbortError'))
+              })
+            }),
+        ),
+      )
 
-    await fetchRelays(signal)
+      // The handler is attached before the clock moves, not after. Advancing the
+      // timers is what makes this reject, and a promise that rejects with nothing
+      // yet listening is an unhandled rejection — which vitest reports as an error
+      // beside a green run, and which only showed up on CI.
+      const kind = rejectionKind(fetchRelays())
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS)
 
-    expect(fetchMock).toHaveBeenCalledWith('/v1/relays', expect.objectContaining({ signal }))
+      // 'timeout', not 'offline': something is listening, which is a different
+      // thing to go and look at than a hub that is switched off.
+      expect(await kind).toBe('timeout')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not give up before the deadline', async () => {
+    vi.useFakeTimers()
+    try {
+      let settle: ((response: Response) => void) | undefined
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          () =>
+            new Promise<Response>((resolve) => {
+              settle = resolve
+            }),
+        ),
+      )
+
+      const pending = fetchRelays()
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS - 1)
+      settle?.(jsonResponse({ relays: [] }))
+
+      await expect(pending).resolves.toEqual([])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('cancels the request in flight when the caller aborts', async () => {
+    // Not the caller's own signal any more: every request carries a deadline, so
+    // what fetch is given is derived from both. Asserting the identity of the
+    // object stopped describing anything; what matters is that a cancellation
+    // still reaches the request.
+    const abort = new DOMException('The operation was aborted.', 'AbortError')
+    const fetchMock = vi.fn(
+      (_input: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(abort)
+          })
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const controller = new AbortController()
+    // Settled into a value before the abort, for the same reason as the deadline
+    // test above: nothing may be listening at the moment it rejects.
+    const rejection = fetchRelays(controller.signal).catch((cause: unknown) => cause)
+
+    const passed = fetchMock.mock.calls[0]?.[1]?.signal
+    expect(passed).toBeDefined()
+    expect(passed?.aborted).toBe(false)
+
+    controller.abort()
+
+    expect(passed?.aborted).toBe(true)
+    // Rethrown as itself rather than reported as an outage: the caller asked.
+    await expect(rejection).resolves.toBe(abort)
   })
 })
 
