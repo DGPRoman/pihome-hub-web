@@ -40,8 +40,22 @@
 }
 
 .value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.reading {
+  white-space: nowrap;
+}
+
+/* The age sits beside its own reading rather than under the row, because one
+   "last seen" above three quantities of different ages is untrue about two of
+   them. Smaller and muted so the value still reads first. */
+.value .note {
+  font-size: 0.8125rem;
 }
 
 .note {

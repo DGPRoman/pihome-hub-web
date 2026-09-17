@@ -8,6 +8,7 @@ const REPORTED = {
   id: 'porch-motion',
   label: 'Porch motion sensor',
   stale: false,
+  stale_after_seconds: 300,
   last_seen: '2026-08-11T07:27:37.220550Z',
   motion: true,
   motion_updated_at: '2026-08-11T07:27:37.220550Z',
@@ -21,6 +22,7 @@ const SILENT = {
   id: 'gate-camera',
   label: 'Gate camera motion',
   stale: true,
+  stale_after_seconds: 300,
   last_seen: null,
   motion: null,
   motion_updated_at: null,
@@ -35,15 +37,70 @@ afterEach(() => {
 
 describe('parseSensor', () => {
   it('maps the wire format onto the app’s own shape', () => {
+    const at = new Date('2026-08-11T07:27:37.220550Z')
+
     expect(parseSensor(REPORTED)).toEqual({
       id: 'porch-motion',
       label: 'Porch motion sensor',
       stale: false,
-      lastSeen: new Date('2026-08-11T07:27:37.220550Z'),
-      motion: true,
-      temperature: 18.5,
-      humidity: 62,
+      staleAfterSeconds: 300,
+      lastSeen: at,
+      // Each quantity carries the timestamp the hub recorded for it. Temperature
+      // and humidity share one, because the hub records them together.
+      motion: { kind: 'value', value: true, at },
+      temperature: { kind: 'value', value: 18.5, at },
+      humidity: { kind: 'value', value: 62, at },
     })
+  })
+
+  it('keeps the per-quantity timestamps apart', () => {
+    // The whole point of modelling them: one device, two very different notions
+    // of recent. Collapsing these is what made a stale motion reading render as
+    // a current one.
+    const parsed = parseSensor({
+      ...REPORTED,
+      motion_updated_at: '2026-08-11T06:00:00Z',
+      climate_updated_at: '2026-08-11T07:27:37.220550Z',
+    })
+
+    expect(parsed.motion).toEqual({
+      kind: 'value',
+      value: true,
+      at: new Date('2026-08-11T06:00:00Z'),
+    })
+    expect(parsed.temperature).toEqual({
+      kind: 'value',
+      value: 18.5,
+      at: new Date('2026-08-11T07:27:37.220550Z'),
+    })
+  })
+
+  it('keeps a reading whose timestamp is missing, as one of unknown age', () => {
+    // The value is real. Throwing it away because its age is unknown loses
+    // something true; showing it as current claims something that is not known.
+    const parsed = parseSensor({ ...REPORTED, motion_updated_at: null })
+
+    expect(parsed.motion).toEqual({ kind: 'value', value: true, at: null })
+  })
+
+  it('distinguishes a field this hub omits from one reported as never seen', () => {
+    // Deleted rather than set to undefined: the distinction under test is
+    // between a key that is absent and a key whose value is null, and setting it
+    // to undefined would leave the key in place.
+    const body: Record<string, unknown> = { ...REPORTED, temperature: null }
+    delete body.humidity
+
+    const parsed = parseSensor(body)
+
+    expect(parsed.humidity).toEqual({ kind: 'unsupported' })
+    expect(parsed.temperature).toEqual({ kind: 'never' })
+  })
+
+  it('tolerates a hub that does not report the staleness window', () => {
+    const older: Record<string, unknown> = { ...REPORTED }
+    delete older.stale_after_seconds
+
+    expect(parseSensor(older).staleAfterSeconds).toBeNull()
   })
 
   it('turns the timestamp into a Date, not a string that has to be remembered', () => {
@@ -58,24 +115,25 @@ describe('parseSensor', () => {
     expect(parsed).not.toHaveProperty('climate_updated_at')
   })
 
-  it('reads a device that never reported as null readings, not as zeroes', () => {
+  it('reads a device that never reported as never, not as zeroes', () => {
     // A sensor that has never spoken must not look like a cold, still room.
     expect(parseSensor(SILENT)).toEqual({
       id: 'gate-camera',
       label: 'Gate camera motion',
       stale: true,
+      staleAfterSeconds: 300,
       lastSeen: null,
-      motion: null,
-      temperature: null,
-      humidity: null,
+      motion: { kind: 'never' },
+      temperature: { kind: 'never' },
+      humidity: { kind: 'never' },
     })
   })
 
   it('accepts a reading carrying only some quantities', () => {
     const parsed = parseSensor({ ...SILENT, last_seen: REPORTED.last_seen, motion: false })
 
-    expect(parsed.motion).toBe(false)
-    expect(parsed.temperature).toBeNull()
+    expect(parsed.motion).toEqual({ kind: 'value', value: false, at: null })
+    expect(parsed.temperature).toEqual({ kind: 'never' })
   })
 
   it.each([
