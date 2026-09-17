@@ -1,6 +1,6 @@
 {
   "name": "pihome-hub-web",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Web interface for pihome-hub, a relay control plane for the Raspberry Pi",
