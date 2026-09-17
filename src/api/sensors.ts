@@ -1,5 +1,5 @@
 import { hubRequest, isRecord, malformed, onlyHubErrors, readJson } from './http'
-import type { Sensor } from './types'
+import type { Reading, Sensor } from './types'
 
 const SENSORS_PATH = '/v1/sensors'
 
@@ -62,6 +62,36 @@ function parseTimestamp(value: unknown): Date | null {
 }
 
 /**
+ * Read one quantity, keeping apart the ways it can be missing.
+ *
+ * A field that is not there and a field that is `null` mean different things —
+ * "this hub does not report it" and "this device never has" — and rendering both
+ * the same was indistinguishable on screen. `at` being null is a third case: the
+ * value is real and its age is unknown, which is worth showing rather than a
+ * reason to throw the value away.
+ */
+function reading<T>(
+  body: Record<string, unknown>,
+  field: string,
+  at: Date | null,
+  isValid: (candidate: unknown) => candidate is T,
+): Reading<T> {
+  if (!(field in body)) {
+    return { kind: 'unsupported' }
+  }
+
+  const raw = body[field]
+  if (raw === null || raw === undefined) {
+    return { kind: 'never' }
+  }
+  if (!isValid(raw)) {
+    throw malformed('sensor data')
+  }
+
+  return { kind: 'value', value: raw, at }
+}
+
+/**
  * Validate one sensor snapshot.
  *
  * Exported for its tests. Maps the hub's snake_case onto this app's camelCase and
@@ -75,14 +105,21 @@ export function parseSensor(body: unknown): Sensor {
     throw malformed('sensor data')
   }
 
+  // Temperature and humidity share one timestamp: the hub records them together,
+  // because the sensor that reports one reports the other in the same push.
+  const climateAt = parseTimestamp(body.climate_updated_at)
+
   return {
     id: body.id,
     label: body.label,
     stale: body.stale,
+    // Optional so an older hub still parses. Its absence costs the per-quantity
+    // judgement, not the reading.
+    staleAfterSeconds: nullable(body.stale_after_seconds, isFiniteNumber),
     lastSeen: parseTimestamp(body.last_seen),
-    motion: nullable(body.motion, isBoolean),
-    temperature: nullable(body.temperature, isFiniteNumber),
-    humidity: nullable(body.humidity, isFiniteNumber),
+    motion: reading(body, 'motion', parseTimestamp(body.motion_updated_at), isBoolean),
+    temperature: reading(body, 'temperature', climateAt, isFiniteNumber),
+    humidity: reading(body, 'humidity', climateAt, isFiniteNumber),
   }
 }
 

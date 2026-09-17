@@ -7,14 +7,17 @@ import type { Sensor } from '../api/types'
 import { renderWithQuery } from '../testing/renderWithQuery'
 import { SensorPanel } from './SensorPanel'
 
+const REPORTED_AT = new Date('2026-08-11T11:59:30Z')
+
 const PORCH: Sensor = {
   id: 'porch-motion',
   label: 'Porch motion sensor',
   stale: false,
-  lastSeen: new Date('2026-08-11T11:59:30Z'),
-  motion: true,
-  temperature: 18.5,
-  humidity: 62,
+  staleAfterSeconds: 300,
+  lastSeen: REPORTED_AT,
+  motion: { kind: 'value', value: true, at: REPORTED_AT },
+  temperature: { kind: 'value', value: 18.5, at: REPORTED_AT },
+  humidity: { kind: 'value', value: 62, at: REPORTED_AT },
 }
 
 afterEach(() => {
