@@ -1,5 +1,30 @@
 import { asHubError, HubError, isAbortError } from './errors'
 
+/**
+ * How long the hub is given to answer before a request is abandoned.
+ *
+ * Without one, a hub that accepts the TCP connection and then stops responding is
+ * indistinguishable from a slow one: the request simply never settles. For a Pi on
+ * a home network that can be mid-reboot, mid-reconnect or gone, that is the common
+ * failure rather than an exotic one.
+ *
+ * Shorter than the polling interval on purpose, so a hung read is abandoned before
+ * the next one is due and polls cannot pile up behind it. A test holds the two
+ * numbers in that order.
+ */
+export const REQUEST_TIMEOUT_MS = 8_000
+
+/**
+ * Why a request was abandoned, carried on the signal itself.
+ *
+ * A deadline and a caller cancelling both surface as the same `AbortError`, and
+ * only one of them is worth telling anyone about. Recorded as the abort reason
+ * rather than in a flag beside it: a flag written inside the timer's callback is
+ * something TypeScript cannot see being written, so the check that reads it gets
+ * reported as unreachable.
+ */
+const TIMED_OUT = Symbol('the hub did not answer in time')
+
 /** What this app sends. Narrower than `RequestInit` so headers stay a plain object. */
 export interface HubRequestInit {
   readonly method: 'GET' | 'PUT'
@@ -20,10 +45,29 @@ export async function hubRequest(
 ): Promise<Response> {
   let response: Response
 
+  // Its own controller rather than AbortSignal.timeout, because what matters
+  // afterwards is *why* it aborted: a deadline and a caller cancelling both arrive
+  // as the same AbortError, and only one of them is worth telling anyone about.
+  const deadline = new AbortController()
+  const timer = setTimeout(() => {
+    deadline.abort(TIMED_OUT)
+  }, REQUEST_TIMEOUT_MS)
+
+  const cancel = () => {
+    deadline.abort()
+  }
+  if (signal !== null) {
+    if (signal.aborted) {
+      cancel()
+    } else {
+      signal.addEventListener('abort', cancel, { once: true })
+    }
+  }
+
   try {
     response = await fetch(path, {
       method: init.method,
-      signal,
+      signal: deadline.signal,
       headers: { Accept: 'application/json', ...init.headers },
       ...(init.body === undefined ? {} : { body: init.body }),
     })
@@ -31,11 +75,19 @@ export async function hubRequest(
     // `fetch` rejects only when no answer arrived at all — DNS, a refused
     // connection, or an abort. It resolves for 401 and 500 alike, which is why
     // `response.ok` is checked separately below.
+    if (deadline.signal.reason === TIMED_OUT) {
+      // Distinct from 'offline': something is listening, which is a different
+      // thing to look at than a hub that is switched off.
+      throw new HubError('timeout', 'The hub accepted the connection but did not answer.')
+    }
     if (isAbortError(cause)) {
       // The caller cancelled this itself; reporting an outage would be a lie.
       throw cause
     }
     throw new HubError('offline', 'The hub did not answer. Is it running?')
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', cancel)
   }
 
   if (!response.ok) {
