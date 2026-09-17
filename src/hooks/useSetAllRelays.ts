@@ -42,6 +42,9 @@ export function useSetAllRelays() {
       }
     },
 
-    onSettled: () => queryClient.invalidateQueries({ queryKey: relayKeys.all }),
+    // Not returned: see useSetRelay.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: relayKeys.all })
+    },
   })
 }

@@ -196,6 +196,30 @@ describe('RelayPanel', () => {
     )
   })
 
+  it('reports a refused write without waiting for the reconciling read', async () => {
+    const fetch = vi.spyOn(relaysApi, 'fetchRelays')
+    fetch.mockResolvedValueOnce([PORCH_ON])
+    // The read that follows the write never answers — a hub that accepts the
+    // connection and then stalls. No request in this client has a deadline.
+    fetch.mockReturnValue(deferred<readonly Relay[]>().promise)
+    const write = deferred<Relay>()
+    vi.spyOn(relaysApi, 'setRelay').mockReturnValue(write.promise)
+
+    renderWithQuery(<RelayPanel />)
+    await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
+
+    write.reject(new HubError('unauthorized', 'The hub rejected the API key.', 401))
+
+    // Both of these once waited on the refetch above: the mutation core awaits
+    // whatever onSettled returns before it dispatches the terminal state, so a
+    // write the hub had refused showed no error and kept its switch disabled for
+    // as long as the follow-up read took — here, forever.
+    expect(await screen.findByRole('alert')).toHaveTextContent('rejected the API key')
+    await waitFor(() => {
+      expect(screen.getByRole('switch', { name: 'Porch light' })).toBeEnabled()
+    })
+  })
+
   it('keeps showing the last known state when a refresh fails', async () => {
     const fetch = vi.spyOn(relaysApi, 'fetchRelays')
     fetch.mockResolvedValueOnce([PORCH_OFF])

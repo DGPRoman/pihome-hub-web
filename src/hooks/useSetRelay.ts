@@ -55,8 +55,15 @@ export function useSetRelay() {
 
     // Reconcile with the hub either way. On success the optimistic value is
     // probably right but is still a guess; on failure the rollback restored a
-    // snapshot that may itself be stale. Returned rather than ignored so the
-    // mutation is not settled until the list agrees with the hub again.
-    onSettled: () => queryClient.invalidateQueries({ queryKey: relayKeys.all }),
+    // snapshot that may itself be stale.
+    //
+    // Deliberately not returned. The mutation core awaits whatever `onSettled`
+    // gives back before dispatching the terminal state, so returning this left
+    // `isError` and `isPending` stale for the whole duration of the follow-up
+    // read — a switch that stayed disabled and silent long after the hub had
+    // refused it, and indefinitely against a hub that stalls.
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: relayKeys.all })
+    },
   })
 }
