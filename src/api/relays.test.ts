@@ -145,12 +145,16 @@ describe('fetchRelays', () => {
         ),
       )
 
-      const pending = fetchRelays()
+      // The handler is attached before the clock moves, not after. Advancing the
+      // timers is what makes this reject, and a promise that rejects with nothing
+      // yet listening is an unhandled rejection — which vitest reports as an error
+      // beside a green run, and which only showed up on CI.
+      const kind = rejectionKind(fetchRelays())
       await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS)
 
       // 'timeout', not 'offline': something is listening, which is a different
       // thing to go and look at than a hub that is switched off.
-      expect(await rejectionKind(pending)).toBe('timeout')
+      expect(await kind).toBe('timeout')
     } finally {
       vi.useRealTimers()
     }
@@ -197,7 +201,9 @@ describe('fetchRelays', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const controller = new AbortController()
-    const pending = fetchRelays(controller.signal)
+    // Settled into a value before the abort, for the same reason as the deadline
+    // test above: nothing may be listening at the moment it rejects.
+    const rejection = fetchRelays(controller.signal).catch((cause: unknown) => cause)
 
     const passed = fetchMock.mock.calls[0]?.[1]?.signal
     expect(passed).toBeDefined()
@@ -207,7 +213,7 @@ describe('fetchRelays', () => {
 
     expect(passed?.aborted).toBe(true)
     // Rethrown as itself rather than reported as an outage: the caller asked.
-    await expect(pending).rejects.toBe(abort)
+    await expect(rejection).resolves.toBe(abort)
   })
 })
 
