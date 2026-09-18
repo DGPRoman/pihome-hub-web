@@ -92,8 +92,9 @@ fails if it finds the value anywhere in `dist/`.
 
 That is also the honest limit of what exists today. The proxy is a development convenience, not
 an authentication scheme, and it disappears with `npm run dev`. How a browser proves itself to
-the hub outside development is unsolved here because it is unsolved there: the hub holds two
-static keys and has no notion of a session.
+the hub outside development is unsolved here, but it is no longer unsolved there: the hub still
+guards `/v1` with two static keys, and it now also issues a session cookie that this client does
+not yet use. The missing piece has moved to this side.
 
 ## Quick start
 
@@ -215,21 +216,27 @@ styles are genuinely shared.
 
 ## Roadmap
 
-| Phase | Scope                                                            | Status  |
-| ----- | ---------------------------------------------------------------- | ------- |
-| 1     | Vite build, strict TypeScript, Vitest and Testing Library        | ✅ done |
-| 2     | Typed API client, relay list, loading and failure states         | ✅ done |
-| 3     | ESLint, Prettier and CI                                          | ✅ done |
-| 4     | Relay switching, optimistic writes, polling                      | ✅ done |
-| 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done |
-| 6     | Automation rules, read-only                                      | ✅ done |
-| 7     | Getting this served somewhere, and authenticating a real browser | blocked |
-| 8     | Users, roles and device administration                           | blocked |
+| Phase | Scope                                                            | Status         |
+| ----- | ---------------------------------------------------------------- | -------------- |
+| 1     | Vite build, strict TypeScript, Vitest and Testing Library        | ✅ done        |
+| 2     | Typed API client, relay list, loading and failure states         | ✅ done        |
+| 3     | ESLint, Prettier and CI                                          | ✅ done        |
+| 4     | Relay switching, optimistic writes, polling                      | ✅ done        |
+| 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done        |
+| 6     | Automation rules, read-only                                      | ✅ done        |
+| 7     | Getting this served somewhere, and authenticating a real browser | partly blocked |
+| 8     | Users, roles and device administration                           | blocked        |
 
 Sensors moved ahead of authentication because authentication turned out to have nothing to
-build against. Phases 7 and 8 need the hub to grow first: it serves no static files, holds two
-static API keys, and has no notion of a session, a user or a role. Designing a client for
-permissions the server cannot describe would mean guessing at its API and rewriting later.
+build against. That has half changed. The hub now issues sessions — `POST /v1/session` sets a
+cookie, `GET` and `DELETE` report and clear it — so authenticating a real browser is work this
+repository can start. Serving the bundle is not: the hub still serves no static files, and that
+half of Phase 7 waits on it.
+
+Phase 8 stays blocked outright. The hub stores a role and reports it on the session, but no
+route yet enforces one, so there are still no permissions to build a client against — and
+designing for permissions the server cannot describe would mean guessing at its API and
+rewriting later.
 
 ## License
 
