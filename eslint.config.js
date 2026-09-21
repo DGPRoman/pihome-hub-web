@@ -36,9 +36,13 @@ export default tseslint.config(
         { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
       ],
 
-      // Guards the pattern the request state depends on. The `never` assignment
-      // in RelayPanel catches a missing case at build time; this catches it at
-      // edit time, with a message that names the variant.
+      // Guards nothing today, and is kept deliberately. The rationale here used to
+      // name a `never` assignment in RelayPanel; there is none, and the only
+      // `switch` in src/ is over a status code, which cannot be exhausted. Where
+      // a union does have to be covered — the retry policy, the error kinds — it
+      // is a total `Record`, which the compiler checks whether or not this rule
+      // is on. This stays so the first `switch` written over a union is checked
+      // before it is merged rather than after.
       '@typescript-eslint/switch-exhaustiveness-check': 'error',
 
       // With strict null checks on, a condition that can never be false is

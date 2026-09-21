@@ -127,6 +127,68 @@ describe('RelayPanel', () => {
     })
   })
 
+  it('does not undo a write the hub accepted but answered unreadably', async () => {
+    // Driven by hand for the same reason as the test above: the reconciling read
+    // is never answered, so the state this ends on can only be the one the write
+    // put there. Letting the read answer would settle it either way and the test
+    // would pass with the change removed.
+    const fetch = vi.spyOn(relaysApi, 'fetchRelays')
+    fetch.mockResolvedValueOnce([PORCH_OFF])
+    fetch.mockReturnValue(deferred<readonly Relay[]>().promise)
+    const write = deferred<Relay>()
+    vi.spyOn(relaysApi, 'setRelay').mockReturnValue(write.promise)
+
+    renderWithQuery(<RelayPanel />)
+    await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
+
+    const porch = () => screen.getByRole('switch', { name: 'Porch light' })
+    await waitFor(() => {
+      expect(porch()).toHaveAttribute('aria-checked', 'true')
+    })
+
+    // A 2xx whose body the parser rejects. The circuit moved; only the
+    // confirmation was lost. Rolling back here showed the switch in its old
+    // position while the mains was in the new one, and the operator's likely
+    // response — press it again — is a second write.
+    write.reject(
+      new HubError('unreadable', 'The hub answered, but this app could not read the reply.'),
+    )
+
+    await screen.findByRole('status')
+    expect(porch()).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('does not undo a bulk write the hub accepted but answered unreadably', async () => {
+    const fetch = vi.spyOn(relaysApi, 'fetchRelays')
+    fetch.mockResolvedValueOnce([PORCH_ON, GATE_OFF])
+    fetch.mockReturnValue(deferred<readonly Relay[]>().promise)
+    const write = deferred<readonly Relay[]>()
+    vi.spyOn(relaysApi, 'setAllRelays').mockReturnValue(write.promise)
+
+    renderWithQuery(<RelayPanel />)
+    await userEvent.click(await screen.findByRole('button', { name: 'All off' }))
+
+    const porch = () => screen.getByRole('switch', { name: 'Porch light' })
+    await waitFor(() => {
+      expect(porch()).toHaveAttribute('aria-checked', 'false')
+    })
+
+    write.reject(
+      new HubError('unreadable', 'The hub answered, but this app could not read the reply.'),
+    )
+
+    // Waited on the note, not on the state. The relays are already where this
+    // asserts they should be, so a waitFor over them would pass on the first tick
+    // and never see the rollback — which is exactly how this test passed with the
+    // change removed the first time it was written.
+    await screen.findByRole('status')
+    expect(porch()).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByRole('switch', { name: 'Gate light' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
+  })
+
   it('leaves other relays usable while one write is in flight', async () => {
     vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF, GATE_OFF])
     vi.spyOn(relaysApi, 'setRelay').mockReturnValue(deferred<Relay>().promise)

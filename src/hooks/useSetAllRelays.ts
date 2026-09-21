@@ -40,7 +40,13 @@ export function useSetAllRelays() {
       return { previous, wrote: on }
     },
 
-    onError: (_error, _on, context) => {
+    onError: (error, _on, context) => {
+      // See useSetRelay: an answer the client cannot read is not evidence that
+      // the write did not happen, and undoing it on that basis shows a house the
+      // hub never reported.
+      if (error.kind === 'unreadable') {
+        return
+      }
       if (context === undefined) {
         return
       }

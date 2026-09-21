@@ -1,8 +1,14 @@
 /**
  * Why a request to the hub failed.
  *
- * A closed set, so the UI can decide what to show by exhausting it rather than
- * by matching on status codes or, worse, on message text.
+ * A closed set, and exhausted rather than sampled: the retry policy in
+ * `queryClient.ts` is a `Record<HubErrorKind, boolean>`, so adding a kind here
+ * fails the build until somebody decides whether it is worth a second attempt.
+ * The previous comment claimed the UI exhausted this. Nothing did, and a new
+ * kind would have inherited "not worth retrying" by omission.
+ *
+ * Two of these turn on a distinction that decides whether an optimistic write
+ * may be undone — see `unreadable`.
  */
 export type HubErrorKind =
   | 'offline'
@@ -10,7 +16,25 @@ export type HubErrorKind =
   | 'unauthorized'
   | 'rate-limited'
   | 'not-found'
+  /** The hub refused the request this app sent: a 422, or a 4xx it does not model. */
   | 'malformed'
+  /**
+   * The hub answered, and its answer could not be used.
+   *
+   * Only ever raised after a 2xx, which is what separates it from every other
+   * kind here: the write **was applied**. Undoing the optimistic value on this
+   * would leave the switch showing one thing and the circuit doing another, and
+   * the operator's likely response — press it again — is a second write.
+   */
+  | 'unreadable'
+  /**
+   * Something answered, and it was not the hub.
+   *
+   * Every route on the hub answers JSON, errors included. A reply that is not
+   * JSON came from a proxy, a captive portal, or a load balancer's own page — so
+   * the request never reached the hub, and a write on this path did not happen.
+   */
+  | 'not-the-hub'
   | 'server'
   | 'unexpected'
 

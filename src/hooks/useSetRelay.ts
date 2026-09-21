@@ -54,7 +54,15 @@ export function useSetRelay() {
       return { previous, wrote: on }
     },
 
-    onError: (_error, { id }, context) => {
+    onError: (error, { id }, context) => {
+      // The hub took the write and then answered unreadably. Rolling back here
+      // put the switch in its old position while the circuit was in the new one,
+      // and the operator's likely response — press it again — is a second write.
+      // Rejecting the answer is right; concluding from it that nothing happened
+      // is not. The reconciling read below is what settles it.
+      if (error.kind === 'unreadable') {
+        return
+      }
       if (context?.previous === undefined) {
         return
       }

@@ -114,10 +114,59 @@ describe('fetchRelays', () => {
     await expect(rejectionKind(fetchRelays())).resolves.toBe('offline')
   })
 
-  it('reports a non-JSON body as malformed', async () => {
-    stubFetch(new Response('not json at all', { status: 200 }))
+  it('reports a 200 that is not JSON as something other than the hub', async () => {
+    // A captive portal's login page, served with a 200 over the request that was
+    // meant for the hub. Every route on the hub answers JSON, so this did not
+    // come from it — which for a write means the write never happened.
+    stubFetch(new Response('<html>Sign in to continue</html>', { status: 200 }))
 
-    await expect(rejectionKind(fetchRelays())).resolves.toBe('malformed')
+    await expect(rejectionKind(fetchRelays())).resolves.toBe('not-the-hub')
+  })
+
+  it('reports a JSON reply it cannot parse as unreadable, not as a refusal', async () => {
+    // Says JSON and is not — a reply cut off part way, most likely. The hub
+    // answered and the answer is unusable, which is a different thing from the
+    // hub refusing anything.
+    stubFetch(
+      new Response('{"relays": [', {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    await expect(rejectionKind(fetchRelays())).resolves.toBe('unreadable')
+  })
+
+  it('reports a well-formed JSON body of the wrong shape as unreadable', async () => {
+    stubFetch(jsonResponse({ relays: [{ id: 'porch-light' }] }))
+
+    await expect(rejectionKind(fetchRelays())).resolves.toBe('unreadable')
+  })
+
+  describe.each([
+    [403, 'malformed', 'refused'],
+    [409, 'malformed', 'refused'],
+    [418, 'malformed', 'refused'],
+    [500, 'server', 'failed'],
+    [507, 'server', 'failed'],
+  ])('an unmodelled %i', (status, kind, verb) => {
+    it(`is reported as ${kind} and names the number`, async () => {
+      // These all collapsed into one message, so a refusal and a failure read
+      // identically and the operator could not tell which had happened.
+      stubFetch(jsonResponse({ detail: 'nope' }, status))
+
+      await expect(rejectionKind(fetchRelays())).resolves.toBe(kind)
+      await expect(fetchRelays()).rejects.toThrow(String(status))
+      await expect(fetchRelays()).rejects.toThrow(verb)
+    })
+  })
+
+  it('reports an unmodelled status that is not JSON as something other than the hub', async () => {
+    // A load balancer's own 503 page, as against the hub's. The dev proxy's 502
+    // keeps its own message, which the case above this one covers.
+    stubFetch(new Response('<html>Service Unavailable</html>', { status: 507 }))
+
+    await expect(rejectionKind(fetchRelays())).resolves.toBe('not-the-hub')
   })
 
   it('re-throws an abort untouched, so callers can tell it from an outage', async () => {

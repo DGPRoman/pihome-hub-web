@@ -27,6 +27,7 @@ export type Reading<T> =
   | { readonly kind: 'never' }
   /** A value, and the instant it was taken; `at` is null when the hub sent none. */
   | { readonly kind: 'value'; readonly value: T; readonly at: Date | null }
+
 /** One automation rule, as the hub reports it. Mirrors `AutomationRule` in its v1 schema. */
 export interface AutomationRule {
   readonly id: string
