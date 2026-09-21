@@ -1,0 +1,48 @@
+# What tells us a dependency has moved.
+#
+# Dependabot rather than a scheduled workflow, for a reason specific to these
+# repositories: GitHub Actions is not permitted to create pull requests in this
+# organisation, which is what removed release-please. Dependabot is a separate
+# service and is not subject to that setting, so it is the one mechanism here that
+# can actually open a branch on its own.
+#
+# Grouped and weekly. One pull request per package, several times a week, is a
+# stream nobody reads — and a security update is only useful if it is noticed
+# among the rest.
+
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']
+    commit-message:
+      prefix: ci
+    labels: ['chore']
+
+  # package-lock.json is npm's own format and Dependabot writes it the way npm
+  # does, so there is no equivalent of the hub's lockfile problem here.
+  #
+  # Split by what a failure would mean. A production dependency moving changes
+  # what ships to a browser; a development one changes only what builds it, and
+  # the two do not deserve the same attention in a list of open pull requests.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      production:
+        dependency-type: production
+        patterns: ['*']
+      development:
+        dependency-type: development
+        patterns: ['*']
+    commit-message:
+      prefix: build
+    labels: ['chore']
