@@ -23,24 +23,36 @@ describe('createQueryClient', () => {
     expect(createQueryClient().getDefaultOptions().mutations?.retry).toBe(false)
   })
 
-  it.each([
-    ['offline', true],
-    ['server', true],
-    ['timeout', true],
-    ['unauthorized', false],
-    ['rate-limited', false],
-    ['not-found', false],
-    ['malformed', false],
-    ['unexpected', false],
-  ] as const satisfies readonly (readonly [HubErrorKind, boolean])[])(
-    'retrying a %s failure is %s',
-    (kind, expected) => {
-      // Retrying a rejected key or an unknown relay repeats the same answer more
-      // slowly. A timeout is worth another go: something is listening, and a Pi
-      // part way through a reboot answers the connection before the request.
-      expect(retryPolicy()(0, new HubError(kind, 'whatever'))).toBe(expected)
-    },
-  )
+  /**
+   * Every kind, and what should happen to it.
+   *
+   * A total Record rather than a list of pairs, so the compiler requires a row
+   * per kind. A list would have stayed green while silently not covering a kind
+   * added since — which is exactly how the policy itself used to be wrong.
+   */
+  const RETRY_EXPECTATIONS: Readonly<Record<HubErrorKind, boolean>> = {
+    offline: true,
+    server: true,
+    timeout: true,
+    unauthorized: false,
+    'rate-limited': false,
+    'not-found': false,
+    malformed: false,
+    // The hub answered and the answer was unusable. On a read another go might
+    // work; on a write this kind means the write already happened, and a retry
+    // would be a second one.
+    unreadable: false,
+    // A captive portal answers identically until somebody signs in to it.
+    'not-the-hub': false,
+    unexpected: false,
+  }
+
+  it.each(Object.entries(RETRY_EXPECTATIONS))('retrying a %s failure is %s', (kind, expected) => {
+    // Retrying a rejected key or an unknown relay repeats the same answer more
+    // slowly. A timeout is worth another go: something is listening, and a Pi
+    // part way through a reboot answers the connection before the request.
+    expect(retryPolicy()(0, new HubError(kind as HubErrorKind, 'whatever'))).toBe(expected)
+  })
 
   it('stops after the configured number of attempts', () => {
     const retry = retryPolicy()

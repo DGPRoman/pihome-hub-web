@@ -27,8 +27,18 @@ export function renderWithQuery(ui: ReactNode): RenderResult & { queryClient: Qu
     },
   })
 
+  const rendered = render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+
   return {
     queryClient,
-    ...render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>),
+    ...rendered,
+    // Re-wrapped. Testing Library's own `rerender` replaces the whole tree with
+    // what it is given, provider included, so handing it a bare element drops the
+    // client and the component throws where it asks for one. Re-rendering with a
+    // new prop is how a panel hands a row what a completed read said, so this has
+    // to be usable.
+    rerender: (next: ReactNode) => {
+      rendered.rerender(<QueryClientProvider client={queryClient}>{next}</QueryClientProvider>)
+    },
   }
 }

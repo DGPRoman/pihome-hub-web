@@ -91,12 +91,40 @@ export async function hubRequest(
   }
 
   if (!response.ok) {
-    throw errorForStatus(response.status)
+    throw errorForResponse(response)
+  }
+  // A 2xx that is not JSON did not come from the hub. Checked after the status
+  // rather than before it, so a 502 from the dev proxy — which answers HTML —
+  // keeps the message that names the real cause.
+  if (!looksLikeTheHub(response)) {
+    throw notTheHub(response.status)
   }
   return response
 }
 
-function errorForStatus(status: number): HubError {
+/**
+ * True when a response could plausibly have come from the hub.
+ *
+ * Every route on it answers JSON, errors included, so anything else is a proxy,
+ * a captive portal, or a load balancer's own page. Matched on the media type
+ * alone: the charset and any `+json` suffix are somebody else's business.
+ */
+function looksLikeTheHub(response: Response): boolean {
+  const contentType = response.headers.get('content-type')
+  return contentType !== null && /^application\/(\w+\+)?json\b/i.test(contentType.trim())
+}
+
+function notTheHub(status: number): HubError {
+  return new HubError(
+    'not-the-hub',
+    'Something answered instead of the hub. Check for a captive portal or a proxy ' +
+      'on this network.',
+    status,
+  )
+}
+
+function errorForResponse(response: Response): HubError {
+  const status = response.status
   switch (status) {
     case 401:
       return new HubError('unauthorized', 'The hub rejected the API key.', status)
@@ -122,8 +150,39 @@ function errorForStatus(status: number): HubError {
     case 504:
       return new HubError('offline', 'The hub did not answer. Is it running?', status)
     default:
-      return new HubError('server', 'The hub could not complete the request.', status)
+      return errorForUnmodelledStatus(response)
   }
+}
+
+/**
+ * A status this client has no specific answer for.
+ *
+ * Everything here used to collapse into one message, so a 403, a 409, a 502 from
+ * something in front of the hub and a captive portal all read identically and the
+ * operator could not tell "the hub refused this" from "the hub was never
+ * reached". The number is in the message because for an unmodelled status it is
+ * the only thing left to act on — every message above says something specific
+ * instead, which is why none of them carry one.
+ */
+function errorForUnmodelledStatus(response: Response): HubError {
+  const status = response.status
+
+  if (!looksLikeTheHub(response)) {
+    return notTheHub(status)
+  }
+  if (status >= 500) {
+    return new HubError('server', `The hub failed while handling the request (${status}).`, status)
+  }
+  if (status >= 400) {
+    return new HubError('malformed', `The hub refused the request (${status}).`, status)
+  }
+  // 1xx and 3xx reaching here at all means fetch did not follow something it
+  // normally would, which is a redirect loop or a proxy in the way.
+  return new HubError(
+    'unexpected',
+    `The hub answered in a way this app cannot use (${status}).`,
+    status,
+  )
 }
 
 export async function readJson(response: Response): Promise<unknown> {
@@ -133,7 +192,9 @@ export async function readJson(response: Response): Promise<unknown> {
     // forces validation to happen.
     return (await response.json()) as unknown
   } catch {
-    throw new HubError('malformed', 'The hub sent a response this app could not read.')
+    // 'unreadable', not 'malformed'. This runs only on a response the hub already
+    // accepted, so a write that reaches here *happened* — see HubErrorKind.
+    throw new HubError('unreadable', 'The hub answered, but this app could not read the reply.')
   }
 }
 
@@ -157,9 +218,14 @@ export async function onlyHubErrors<T>(operation: () => Promise<T>): Promise<T> 
   }
 }
 
-/** Raised when a body parsed as JSON but was not the shape the client requires. */
+/**
+ * Raised when a body parsed as JSON but was not the shape the client requires.
+ *
+ * 'unreadable' for the same reason as `readJson`: every parser runs on a response
+ * the hub returned 2xx for, so a write that gets this far was applied.
+ */
 export function malformed(what: string): HubError {
-  return new HubError('malformed', `The hub sent ${what} in a shape this app does not recognise.`)
+  return new HubError('unreadable', `The hub sent ${what} in a shape this app does not recognise.`)
 }
 
 /** True for a non-null object, narrowed so its keys can be read as `unknown`. */

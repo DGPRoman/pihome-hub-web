@@ -34,10 +34,34 @@ export const MAX_RETRIES = 2
 /**
  * Failures worth a second attempt.
  *
- * A Set rather than a chain of comparisons so that adding a kind to HubErrorKind
- * is a decision made here rather than one made by omission.
+ * A total Record rather than a Set. The Set version carried a comment saying that
+ * adding a kind to HubErrorKind was "a decision made here rather than one made by
+ * omission", and it was not: a new kind simply fell through as not-retryable and
+ * nothing said so. This shape fails the build until the new kind is listed.
  */
-const RETRYABLE: ReadonlySet<HubErrorKind> = new Set(['offline', 'server', 'timeout'])
+const RETRYABLE: Readonly<Record<HubErrorKind, boolean>> = {
+  // Nothing arrived, or something arrived too late. Both can clear on their own:
+  // a Pi part way through a reboot answers the connection before the request.
+  offline: true,
+  timeout: true,
+  // A fault the hub might not repeat.
+  server: true,
+  // Retrying a rejected key, an unknown relay, or a body the hub refuses just
+  // repeats the same answer more slowly.
+  unauthorized: false,
+  'rate-limited': false,
+  'not-found': false,
+  malformed: false,
+  // The hub answered and the answer was unusable. A second read may well succeed,
+  // but on a write this kind means the write already happened, and the retry
+  // would be a second one — so no.
+  unreadable: false,
+  // A captive portal or a proxy in the way. It will answer identically until
+  // somebody signs in to it, which is not something a retry accomplishes.
+  'not-the-hub': false,
+  // A bug in this app. Repeating it repeats the bug.
+  unexpected: false,
+}
 
 export function createQueryClient(): QueryClient {
   return new QueryClient({
@@ -51,7 +75,7 @@ export function createQueryClient(): QueryClient {
         //
         // A timeout belongs in that set: something is listening, and a Pi part way
         // through a reboot answers the connection before it can answer the request.
-        retry: (failureCount, error) => failureCount < MAX_RETRIES && RETRYABLE.has(error.kind),
+        retry: (failureCount, error) => failureCount < MAX_RETRIES && RETRYABLE[error.kind],
       },
       mutations: {
         // A write is never retried automatically. `PUT` is idempotent, so a retry

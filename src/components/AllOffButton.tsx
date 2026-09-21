@@ -36,11 +36,21 @@ export function AllOffButton({ relays }: AllOffButtonProps) {
         All off
       </button>
 
-      {setAll.isError && (
-        <p className={styles.error} role="alert">
-          {setAll.error.message}
-        </p>
-      )}
+      {setAll.isError &&
+        // An answer the client could not read is not a refusal: the hub took the
+        // write, and the circuits are open. Announcing that as an error would send
+        // somebody to fix a house that is already the way they asked for it — so
+        // it is a status, and it says what is being done about it. See
+        // HubErrorKind for why this one kind is different from all the others.
+        (setAll.error.kind === 'unreadable' ? (
+          <p className={styles.unconfirmed} role="status">
+            {setAll.error.message} Rechecking with the hub.
+          </p>
+        ) : (
+          <p className={styles.error} role="alert">
+            {setAll.error.message}
+          </p>
+        ))}
     </>
   )
 }

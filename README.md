@@ -61,9 +61,20 @@ so pressing a switch feels immediate. The write is undone from a snapshot if the
 in-flight reads are cancelled first so a stale poll cannot spring the switch back, and the
 list is re-read either way — a success is still a guess until the hub says otherwise.
 
+**A refusal and an unreadable answer are not the same thing.** A write the hub _accepted_ and
+then answered with a body the parser rejects is not evidence that nothing happened: the
+circuit moved, and only the confirmation was lost. Undoing it there put the switch in its old
+position while the mains was in the new one, and the obvious response — press it again — is a
+second write. That case is reported as a status rather than an error, the value stands, the
+switch is marked as not settled until the hub speaks again, and a re-read decides it.
+
 **Failures say what happened, and never discard something true.** A stopped hub, a rejected
-key and a malformed body are distinguishable, both to code and on screen. Nothing renders an
-empty list to mean "we could not tell". A poll that fails over data already on screen shows a
+key, a body the hub refused and an answer that did not come from the hub at all are
+distinguishable, both to code and on screen. Every route on the hub answers JSON, so a reply
+that is not JSON is a proxy or a captive portal rather than the hub — which for a write means
+it never arrived. A status the client does not model says so and names the number, instead of
+collapsing a 403, a 409 and a gateway's own page into one sentence. Nothing renders an empty
+list to mean "we could not tell". A poll that fails over data already on screen shows a
 warning above the last known state rather than blanking a working list.
 
 **A crash stays in the section it happened in.** A component that throws while rendering

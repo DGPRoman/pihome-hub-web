@@ -36,3 +36,10 @@
   color: var(--color-danger);
   font-size: 0.875rem;
 }
+
+/* The hub took the write and its reply was unreadable. Not a failure. */
+.unconfirmed {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+}
