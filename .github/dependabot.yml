@@ -37,12 +37,20 @@ updates:
       interval: weekly
       day: monday
     groups:
+      # Minor and patch only, so a major lands in a pull request of its own.
+      #
+      # The first grouped run proved why. It carried sixteen development updates
+      # and one of them took TypeScript from 5.9 to 7.0, which
+      # @typescript-eslint/eslint-plugin 8.x refuses as a peer — so npm would not
+      # install any of it, and fifteen safe updates were held up by one that is
+      # not adoptable yet. Split out, the major is its own decision and the rest
+      # go through.
       production:
         dependency-type: production
-        patterns: ['*']
+        update-types: ['minor', 'patch']
       development:
         dependency-type: development
-        patterns: ['*']
+        update-types: ['minor', 'patch']
     commit-message:
       prefix: build
     labels: ['chore']
