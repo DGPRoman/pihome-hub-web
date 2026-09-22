@@ -1,6 +1,7 @@
-import { QueryClient } from '@tanstack/react-query'
+import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query'
 
 import type { HubError, HubErrorKind } from './api/errors'
+import { sessionKeys } from './hooks/queryKeys'
 
 /**
  * Tell TanStack Query what an error is in this app.
@@ -64,7 +65,29 @@ const RETRYABLE: Readonly<Record<HubErrorKind, boolean>> = {
 }
 
 export function createQueryClient(): QueryClient {
-  return new QueryClient({
+  /**
+   * A 401 from anything means the session this browser had is no longer one.
+   *
+   * Handled once, on the cache, rather than in each hook. Every read and every
+   * write can meet it — a session expires on its own schedule and nothing tells
+   * the page when — so a per-hook answer would be the same three lines repeated
+   * until one of them was forgotten, and the one that was forgotten would be a
+   * panel quietly showing what the house looked like before.
+   *
+   * Recording it as "nobody is logged in" rather than as an error: it is the
+   * truth, the shell already knows what to render for it, and the login form is
+   * the only thing that helps. The session query itself cannot reach here — it
+   * answers null for a 401 instead of rejecting.
+   */
+  const forgetTheSession = (error: HubError): void => {
+    if (error.kind === 'unauthorized') {
+      client.setQueryData(sessionKeys.current, null)
+    }
+  }
+
+  const client = new QueryClient({
+    queryCache: new QueryCache({ onError: forgetTheSession }),
+    mutationCache: new MutationCache({ onError: forgetTheSession }),
     defaultOptions: {
       queries: {
         staleTime: STALE_TIME_MS,
@@ -85,4 +108,6 @@ export function createQueryClient(): QueryClient {
       },
     },
   })
+
+  return client
 }

@@ -1,6 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { render, type RenderResult } from '@testing-library/react'
 import type { ReactNode } from 'react'
+
+import { createQueryClient } from '../queryClient'
 
 /**
  * Render inside a fresh query client.
@@ -20,11 +22,16 @@ import type { ReactNode } from 'react'
  * schedule is tested directly, where it is configured.
  */
 export function renderWithQuery(ui: ReactNode): RenderResult & { queryClient: QueryClient } {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, refetchInterval: false, staleTime: Infinity },
-      mutations: { retry: false },
-    },
+  // The shipped client, with its schedule replaced. Built by createQueryClient
+  // rather than from scratch because the caches it installs carry behaviour the
+  // app depends on — a 401 from anything records that nobody is logged in — and a
+  // hand-built client silently has none of it. Only the *policies* are overridden,
+  // which is the part of this that is about keeping a test fast rather than about
+  // what the app does.
+  const queryClient = createQueryClient()
+  queryClient.setDefaultOptions({
+    queries: { retry: false, refetchInterval: false, staleTime: Infinity },
+    mutations: { retry: false },
   })
 
   const rendered = render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)

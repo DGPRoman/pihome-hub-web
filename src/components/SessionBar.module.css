@@ -1,0 +1,45 @@
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.875rem;
+}
+
+.who {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.role {
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.logout {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.logout:hover:not(:disabled) {
+  background-color: var(--color-surface-raised);
+}
+
+.logout:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.logout:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
