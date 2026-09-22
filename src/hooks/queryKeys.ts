@@ -17,3 +17,7 @@ export const sensorKeys = {
 export const ruleKeys = {
   all: ['automation-rules'] as const,
 }
+
+export const sessionKeys = {
+  current: ['session'] as const,
+}

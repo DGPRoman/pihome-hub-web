@@ -27,10 +27,34 @@ const TIMED_OUT = Symbol('the hub did not answer in time')
 
 /** What this app sends. Narrower than `RequestInit` so headers stay a plain object. */
 export interface HubRequestInit {
-  readonly method: 'GET' | 'PUT'
+  readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE'
   readonly headers?: Record<string, string>
   readonly body?: string
 }
+
+/**
+ * Methods that change nothing, as RFC 9110 defines safe.
+ *
+ * Kept as a set rather than checked inline because two places ask the question
+ * and they must not drift: this file, and the hub, which requires the header
+ * below on exactly the methods this does not list.
+ */
+const SAFE_METHODS: ReadonlySet<HubRequestInit['method']> = new Set(['GET'])
+
+/**
+ * Header the hub requires on a write authenticated by the session cookie.
+ *
+ * Its presence is the whole check and the hub never reads the value — a page on
+ * another origin cannot set a header like this without a CORS preflight, and the
+ * hub answers no CORS headers, so the request is never sent. That is what stops a
+ * request some other site caused this browser to make from switching a circuit.
+ *
+ * Sent on every write, including one the hub would have accepted on an API key
+ * alone. Deciding per request would mean this client knowing which credential the
+ * proxy in front of it is using, which is exactly the thing it is written not to
+ * know.
+ */
+const CSRF_HEADER = 'X-Pihome-CSRF'
 
 /**
  * Send one request to the hub and hand back the response, or raise.
@@ -68,7 +92,15 @@ export async function hubRequest(
     response = await fetch(path, {
       method: init.method,
       signal: deadline.signal,
-      headers: { Accept: 'application/json', ...init.headers },
+      // Same-origin, so the session cookie travels by default; this is explicit
+      // because the default is a thing to rely on deliberately rather than by
+      // accident.
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        ...(SAFE_METHODS.has(init.method) ? {} : { [CSRF_HEADER]: '1' }),
+        ...init.headers,
+      },
       ...(init.body === undefined ? {} : { body: init.body }),
     })
   } catch (cause) {
@@ -103,13 +135,26 @@ export async function hubRequest(
 }
 
 /**
+ * Statuses RFC 9110 defines as carrying no body.
+ *
+ * A response with no body has no media type to check, and demanding one of it is
+ * how a perfectly good answer gets called a captive portal. `DELETE /v1/session`
+ * is the hub's 204, and it is what found this.
+ */
+const BODILESS_STATUSES: ReadonlySet<number> = new Set([204, 205, 304])
+
+/**
  * True when a response could plausibly have come from the hub.
  *
- * Every route on it answers JSON, errors included, so anything else is a proxy,
- * a captive portal, or a load balancer's own page. Matched on the media type
- * alone: the charset and any `+json` suffix are somebody else's business.
+ * Every route on it answers JSON where it answers anything at all, errors
+ * included, so a body that is not JSON came from a proxy, a captive portal, or a
+ * load balancer's own page. Matched on the media type alone: the charset and any
+ * `+json` suffix are somebody else's business.
  */
 function looksLikeTheHub(response: Response): boolean {
+  if (BODILESS_STATUSES.has(response.status)) {
+    return true
+  }
   const contentType = response.headers.get('content-type')
   return contentType !== null && /^application\/(\w+\+)?json\b/i.test(contentType.trim())
 }

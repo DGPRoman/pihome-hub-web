@@ -94,18 +94,22 @@ tokens and a few element defaults are global. Class names cannot collide, and de
 component deletes its styles with it. State is never carried by colour alone, and focus is
 always visible.
 
-**Nothing secret ships to the browser.** Vite inlines every `VITE_`-prefixed variable into
-the bundle, which makes it readable by anyone who opens devtools. The hub's API key is not
-build-time configuration and is never treated as such: in development the dev-server proxy
-attaches it in Node, after the browser's request has already been made. That claim rests on a
-naming convention, which a rename could break silently, so CI builds with a canary key and
-fails if it finds the value anywhere in `dist/`.
+**Nothing secret ships to the browser, and nothing secret is held here at all.** The client
+authenticates by logging in: the hub answers with a session token in an `HttpOnly` cookie,
+which this code cannot read — a scripting bug here cannot exfiltrate a credential that
+outlives the page — and every later request carries it because they are same-origin.
 
-That is also the honest limit of what exists today. The proxy is a development convenience, not
-an authentication scheme, and it disappears with `npm run dev`. How a browser proves itself to
-the hub outside development is unsolved here, but it is no longer unsolved there: the hub still
-guards `/v1` with two static keys, and it now also issues a session cookie that this client does
-not yet use. The missing piece has moved to this side.
+There is no API key in this repository, in the bundle, or in the dev-server proxy. The proxy
+used to attach one in Node; it no longer does, for the reason the quick start gives. Vite
+inlines every `VITE_`-prefixed variable into the bundle, so "no credential reaches the
+browser" would rest on a naming convention if there were a credential to name — CI still
+builds with a canary value and fails if it finds it in `dist/`, which now guards against the
+mechanism coming back rather than against the one that was there.
+
+A write authenticated by that cookie carries an `X-Pihome-CSRF` header. Any value: the hub
+never reads it, and its presence is the whole check, because a page on another origin cannot
+set a header like that without a CORS preflight the hub will not answer. `SameSite=Strict` on
+the cookie is the first lock on the same door.
 
 ## Quick start
 
@@ -122,24 +126,32 @@ npm run dev
 
 Then open <http://127.0.0.1:5173>.
 
-To see real relay and sensor state, start the hub first (see its own quick start) and copy its
-relay key into `.env`:
+To see real relay and sensor state, start the hub first (see its own quick start) and give
+yourself an account on it:
 
 ```bash
-grep PIHOME_RELAY_API_KEY ../pihome-hub/.env
+pihome-hub-admin create roman --role operator   # prompts for the password, twice
 ```
 
-`npm run dev` proxies `/v1` and `/health` to `http://127.0.0.1:5002`, attaching that key on
-the way out. Requests therefore stay same-origin and carry no credential from the browser, so
+Then log in on the page. `npm run dev` proxies `/v1` and `/health` to
+`http://127.0.0.1:5002` and adds nothing on the way out, so requests stay same-origin —
+which is what lets the session cookie work here exactly as it will anywhere else, and why
 the app needs no CORS-shaped special case that would exist only in development. Point it at
 another hub with `PIHOME_HUB_ORIGIN` — see [`.env.example`](.env.example).
 
-The relay key is the right one for both panels: the hub guards reading sensors with it, and
-accepts only the separate sensor key for pushing readings. That split is deliberate on its
-side — firmware that reports motion should not also be able to survey the house.
+**There is no way to skip the login, and that is deliberate.** The proxy used to attach the
+hub's relay API key, which made development work with no account — and made the role on that
+account mean nothing, because the hub admits a valid key to every route. A `viewer` reaching
+the hub that way could switch a mains circuit it would otherwise have refused them. A
+development mode that grants more than production hides exactly the bugs this client exists
+to avoid.
 
-Leaving the key unset is a useful thing to try: the page should report that the hub rejected
-it, not show two empty lists.
+The role you give yourself is worth choosing on purpose. An `operator` can switch relays; a
+`viewer` is shown the house and refused every write, which is a useful thing to look at
+once.
+
+Logging out, or letting the session expire, should return the page to the login form rather
+than leaving a stale house on screen.
 
 A hub with sensors configured but nothing pushed yet shows what an unreported device looks
 like. To give it something to report:

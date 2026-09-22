@@ -93,11 +93,13 @@ jobs:
         run: npm ci
 
       - name: Build, and verify no hub credential reached the bundle
-        # The README claims the hub's API key cannot reach the browser. Vite
-        # inlines VITE_-prefixed variables into the output, so that claim rests
-        # on a naming convention — which a future rename could break silently.
-        # Building with a canary value and grepping the output turns the claim
-        # into something CI enforces.
+        # The client holds no credential at all now — it logs in, and the token
+        # comes back in a cookie it cannot read. This guards against that being
+        # undone: the dev proxy used to attach an API key in Node, and Vite
+        # inlines every VITE_-prefixed variable into the output, so reintroducing
+        # one under the wrong name would put it in front of anyone who opens
+        # devtools. Building with a canary value and grepping dist/ is what makes
+        # the README's claim something CI enforces rather than something it says.
         env:
           PIHOME_RELAY_API_KEY: canary-must-never-be-bundled
           PIHOME_HUB_ORIGIN: http://127.0.0.1:5002

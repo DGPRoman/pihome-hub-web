@@ -161,6 +161,15 @@ describe('fetchRelays', () => {
     })
   })
 
+  it('accepts a 204, which cannot carry a media type', async () => {
+    // A bodiless status has nothing to check, and demanding JSON of one is how a
+    // perfectly good answer gets called a captive portal. The hub's logout route
+    // is a 204 and is what found this.
+    stubFetch(new Response(null, { status: 204 }))
+
+    await expect(rejectionKind(fetchRelays())).resolves.not.toBe('not-the-hub')
+  })
+
   it('reports an unmodelled status that is not JSON as something other than the hub', async () => {
     // A load balancer's own 503 page, as against the hub's. The dev proxy's 502
     // keeps its own message, which the case above this one covers.

@@ -80,3 +80,20 @@ export interface Sensor {
   readonly temperature: Reading<number>
   readonly humidity: Reading<number>
 }
+
+/**
+ * What an account may do, as the hub reports it.
+ *
+ * A closed set, and the client decides from it rather than from a message: a
+ * `viewer` is shown what it cannot do instead of being allowed to try and told
+ * `403`. The hub enforces it either way — this only decides what to render.
+ */
+export type Role = 'admin' | 'operator' | 'viewer'
+
+/** Who this browser is logged in as. Mirrors `SessionResponse` in the hub's v1 schema. */
+export interface Session {
+  readonly username: string
+  readonly role: Role
+  /** When the hub will stop accepting this session, whatever the browser does. */
+  readonly expiresAt: Date
+}
