@@ -56,7 +56,13 @@ describe('RelayPanel', () => {
 
     expect(await screen.findByRole('switch', { name: 'Porch light' })).toBeInTheDocument()
     expect(screen.getAllByRole('switch')).toHaveLength(2)
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    // One live region per row, empty until that row has something to announce.
+    // They are in the document from the start on purpose: a region the browser has
+    // not been watching may not be announced at all when it appears.
+    expect(screen.getAllByRole('status')).toHaveLength(2)
+    for (const region of screen.getAllByRole('status')) {
+      expect(region).toBeEmptyDOMElement()
+    }
   })
 
   it('distinguishes a hub with no relays from a hub that could not be read', async () => {
@@ -154,7 +160,7 @@ describe('RelayPanel', () => {
       new HubError('unreadable', 'The hub answered, but this app could not read the reply.'),
     )
 
-    await screen.findByRole('status')
+    await screen.findByText(/The switch may have moved/)
     expect(porch()).toHaveAttribute('aria-checked', 'true')
   })
 
@@ -181,7 +187,9 @@ describe('RelayPanel', () => {
     // asserts they should be, so a waitFor over them would pass on the first tick
     // and never see the rollback — which is exactly how this test passed with the
     // change removed the first time it was written.
-    await screen.findByRole('status')
+    // The bulk button's own note, not a row's: the rows have live regions now too,
+    // so this waits on the text rather than on the role.
+    await screen.findByText(/Rechecking with the hub/)
     expect(porch()).toHaveAttribute('aria-checked', 'false')
     expect(screen.getByRole('switch', { name: 'Gate light' })).toHaveAttribute(
       'aria-checked',
@@ -197,11 +205,19 @@ describe('RelayPanel', () => {
     await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
 
     // Each row owns its own mutation, so a shared pending flag cannot grey out
-    // the whole list.
+    // the whole list. `aria-disabled` rather than `disabled`, because a disabled
+    // element is not focusable and pressing a switch used to throw a keyboard user
+    // back to the top of the document — see RelayRow.
     await waitFor(() => {
-      expect(screen.getByRole('switch', { name: 'Porch light' })).toBeDisabled()
+      expect(screen.getByRole('switch', { name: 'Porch light' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      )
     })
-    expect(screen.getByRole('switch', { name: 'Gate light' })).toBeEnabled()
+    expect(screen.getByRole('switch', { name: 'Gate light' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
   })
 
   it('offers no bulk control until the hub has said what there is to switch off', () => {

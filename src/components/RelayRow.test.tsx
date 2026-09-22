@@ -35,7 +35,7 @@ describe('RelayRow', () => {
   })
 
   it('refuses further presses while a write is in flight', async () => {
-    vi.spyOn(relaysApi, 'setRelay').mockReturnValue(
+    const setRelay = vi.spyOn(relaysApi, 'setRelay').mockReturnValue(
       new Promise(() => {
         // Never settles: models a write still in flight.
       }),
@@ -46,9 +46,63 @@ describe('RelayRow', () => {
     await userEvent.click(control)
 
     await waitFor(() => {
-      expect(control).toBeDisabled()
+      expect(control).toHaveAttribute('aria-disabled', 'true')
     })
     expect(control).toHaveAttribute('aria-busy', 'true')
+
+    // The refusal, not the attribute that used to imply it. `aria-disabled` is a
+    // claim about the control and not a rule the browser enforces, so the handler
+    // has to turn a second press away itself — and this is the assertion that
+    // notices if it stops.
+    await userEvent.click(control)
+    await userEvent.click(control)
+    expect(setRelay).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays focusable while the write is in flight', async () => {
+    // The bug this replaces: `disabled` makes an element unfocusable, so a browser
+    // blurs it the moment the attribute lands. Pressing a switch with the keyboard
+    // threw you to the top of the document, on every press, and the write is over
+    // in milliseconds so there is nothing to see happen.
+    //
+    // jsdom does not implement that blur, so the symptom cannot be reproduced
+    // here — this asserts the mechanism that prevents it instead. A browser check
+    // is still owed; see the issue.
+    vi.spyOn(relaysApi, 'setRelay').mockReturnValue(new Promise(() => {}))
+
+    renderWithQuery(<RelayRow relay={PORCH_OFF} />)
+    const control = screen.getByRole('switch', { name: 'Porch light' })
+    await userEvent.click(control)
+
+    await waitFor(() => {
+      expect(control).toHaveAttribute('aria-disabled', 'true')
+    })
+    expect(control).not.toBeDisabled()
+    expect(control).toHaveFocus()
+  })
+
+  it('announces a successful switch, not only a refused one', async () => {
+    // Only failure was announced, so the one outcome that went by in silence was a
+    // mains circuit actually changing state.
+    vi.spyOn(relaysApi, 'setRelay').mockResolvedValue(PORCH_ON)
+
+    renderWithQuery(<RelayRow relay={PORCH_OFF} />)
+    await userEvent.click(screen.getByRole('switch', { name: 'Porch light' }))
+
+    // status, not alert: an alert interrupts, and a switch doing what it was asked
+    // is not an interruption.
+    expect(await screen.findByRole('status')).toHaveTextContent('Porch light off')
+  })
+
+  it('says nothing before anything has been pressed', () => {
+    vi.spyOn(relaysApi, 'setRelay').mockResolvedValue(PORCH_ON)
+
+    renderWithQuery(<RelayRow relay={PORCH_OFF} />)
+
+    // The live region is in the document from the start — a region announced only
+    // once it appears is a region screen readers may not have been watching — so
+    // what matters is that it is empty until there is something to say.
+    expect(screen.getByRole('status')).toBeEmptyDOMElement()
   })
 
   it('announces a refused write instead of failing silently', async () => {
@@ -78,8 +132,10 @@ describe('RelayRow', () => {
 
       // status, not alert. The circuit is where they asked for it; only the
       // confirmation was lost, and an alert would send them to fix nothing.
-      expect(await screen.findByRole('status')).toHaveTextContent('rechecking with the hub')
+      expect(await screen.findByRole('status')).toHaveTextContent('Rechecking with the hub')
       expect(screen.queryByRole('alert')).toBeNull()
+      // And visibly, for somebody who is looking at it.
+      expect(screen.getByText(/The switch may have moved/)).toBeInTheDocument()
     })
 
     it('marks the state as unconfirmed rather than showing it as settled', async () => {
@@ -101,7 +157,10 @@ describe('RelayRow', () => {
       renderWithQuery(<RelayRow relay={PORCH_OFF} />)
       await userEvent.click(screen.getByRole('switch', { name: 'Porch light' }))
 
-      const note = await screen.findByRole('status')
+      // The note is visible text with an id, not a live region of its own — the
+      // hidden region above announces it, and two regions describing one press
+      // would compete.
+      const note = await screen.findByText(/The switch may have moved/)
       const control = screen.getByRole('switch', { name: 'Porch light' })
       expect(control).toHaveAttribute('aria-describedby', note.id)
     })
@@ -119,8 +178,11 @@ describe('RelayRow', () => {
       rerender(<RelayRow relay={PORCH_ON} />)
 
       await waitFor(() => {
-        expect(screen.queryByRole('status')).toBeNull()
+        expect(screen.queryByText(/The switch may have moved/)).toBeNull()
       })
+      // The live region stays in the document — one that appears only when it has
+      // something to say may not be announced at all — so what clears is its text.
+      expect(screen.getByRole('status')).toBeEmptyDOMElement()
       expect(screen.getByText('On')).toBeInTheDocument()
     })
 

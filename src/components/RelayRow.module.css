@@ -27,11 +27,6 @@
   outline-offset: -2px;
 }
 
-.control:disabled {
-  cursor: progress;
-  opacity: 0.6;
-}
-
 .label {
   font-weight: 500;
 }
@@ -91,4 +86,33 @@
   padding: 0 var(--space-4) var(--space-3);
   color: var(--color-text-muted);
   font-size: 0.875rem;
+}
+
+/*
+ * Present for assistive technology, absent for everyone else.
+ *
+ * Not `display: none` and not `visibility: hidden` — both remove the element from
+ * the accessibility tree as well as from the page, which is the opposite of what
+ * this is for. Clipping it to a single pixel leaves it in the tree, and leaves a
+ * live region able to announce.
+ */
+.announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * aria-disabled rather than :disabled, so the styling follows the attribute that
+ * is actually set. The element stays focusable on purpose — see RelayRow.
+ */
+.control[aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.6;
 }

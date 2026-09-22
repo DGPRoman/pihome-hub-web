@@ -52,10 +52,23 @@ export function RelayRow({ relay }: RelayRowProps) {
         // would be worse than one that announces a value with a caveat.
         aria-checked={relay.on}
         aria-busy={setRelay.isPending}
+        // `aria-disabled`, not `disabled`. A disabled element is not focusable, so
+        // a browser blurs it the moment the attribute lands — which is the whole
+        // of the bug: pressing a switch with the keyboard threw you back to the
+        // top of the document, on every press, and the write is over in
+        // milliseconds so there is nothing to see happen. `aria-disabled` says the
+        // same thing to assistive technology and leaves the element focusable.
+        //
+        // The press has to be refused in the handler instead, because
+        // `aria-disabled` is a claim about the control and not a rule the browser
+        // enforces.
+        aria-disabled={setRelay.isPending}
         {...(unconfirmed ? { 'aria-describedby': noteId } : {})}
         className={styles.control}
-        disabled={setRelay.isPending}
         onClick={() => {
+          if (setRelay.isPending) {
+            return
+          }
           // The desired state, not a toggle: see setRelay in the API layer.
           setRelay.mutate({ id: relay.id, on: !relay.on })
         }}
@@ -72,11 +85,41 @@ export function RelayRow({ relay }: RelayRowProps) {
         </span>
       </button>
 
+      {/*
+        What happened, for somebody who cannot see the switch move.
+
+        One live region per row, not two. Only failure used to be announced, so the
+        one outcome that went by in silence was a mains circuit actually changing
+        state — the case where a confirmation is most worth having. Adding a second
+        region for that would have meant two of them competing to describe the same
+        press, so this is the only one, and it carries whichever outcome there is.
+
+        `role="status"` rather than `alert`: an alert interrupts, and neither a
+        switch doing what it was asked nor a lost confirmation is an interruption.
+        A refusal is, and that is still an alert below.
+
+        Rendered empty rather than added when there is something to say. A live
+        region the browser has not been watching may not be announced at all when
+        it appears, so it has to be in the document from the start.
+
+        Hidden visually rather than hidden from assistive technology — the switch
+        already says On or Off to anyone who can see it, and the note below already
+        says the rest.
+      */}
+      <span className={styles.announcement} role="status">
+        {unconfirmed
+          ? `${relay.label}: ${setRelay.error.message} Rechecking with the hub.`
+          : setRelay.isSuccess
+            ? `${relay.label} ${relay.on ? 'on' : 'off'}`
+            : ''}
+      </span>
+
       {unconfirmed ? (
-        // `status`, not `alert`. The write was applied; only the confirmation was
-        // lost, and announcing that as an error would tell the operator to do
-        // something about a circuit that is already where they asked for it.
-        <p className={styles.unconfirmed} id={noteId} role="status">
+        // Visible, and not a live region of its own — the switch points at it with
+        // aria-describedby and the region above announces it. The write was
+        // applied; only the confirmation was lost, and calling that an error would
+        // send somebody to fix a circuit that is already where they asked for it.
+        <p className={styles.unconfirmed} id={noteId}>
           {setRelay.error.message} The switch may have moved — rechecking with the hub.
         </p>
       ) : (
