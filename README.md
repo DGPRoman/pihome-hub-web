@@ -186,6 +186,78 @@ that read the type checker catch a promise nobody awaited, or a `switch` over a 
 quietly stopped being exhaustive. Neither is visible from syntax alone. Formatting is
 Prettier's job and correctness is ESLint's, so the two are not configured to overlap.
 
+## Deployment
+
+The hub serves this bundle itself. There is no second web server, no nginx in front and no
+CORS: the page and the API are one origin, which is what lets the session cookie work in a
+deployment exactly as it does under `npm run dev`.
+
+**Build here, install there.** A Pi Zero has no business running npm, and the output is
+byte-for-byte the same either way.
+
+```bash
+npm run build
+rsync -a --delete dist/ pi:/tmp/pihome-hub-web/
+rsync -a deploy/install.sh pi:/tmp/
+ssh pi 'sudo /tmp/install.sh /tmp/pihome-hub-web'
+```
+
+The script goes over with the bundle rather than being checked out on the Pi: it depends on
+nothing else in this repository, and a deployment that needs a git clone on the target is one
+more thing to keep in step.
+
+[`deploy/install.sh`](deploy/install.sh) puts the build in `/opt/pihome-hub-web/releases/`
+under a timestamp and points `/opt/pihome-hub-web/current` at it. The first install prints
+the one line the hub needs:
+
+```
+PIHOME_WEB_ROOT=/opt/pihome-hub-web/current
+```
+
+Add it to `/etc/pihome-hub/hub.env` and restart the hub once. **Every install after that
+needs no restart**, and that is the reason for the symlink rather than a matter of taste:
+restarting the hub drives every relay back to its configured initial state, and a light
+somebody is standing under is not a deployment detail. The script never edits `hub.env`
+itself — that file belongs to pihome-hub, whose own installer writes it, and a package that
+edits another's configuration is one that fights it on the next upgrade.
+
+The flip is a `rename(2)` over the symlink rather than `ln -sfn`, which unlinks first: a
+request arriving in that window would be a 404 on the front page. Nobody's browser ever sees
+an `index.html` naming assets that have already been deleted, because the old release is
+still there — the last three are kept, so rolling back is pointing the symlink at the one
+before:
+
+```bash
+ssh pi 'sudo ln -s /opt/pihome-hub-web/releases/<earlier> /opt/pihome-hub-web/current.incoming \
+        && sudo mv -T /opt/pihome-hub-web/current.incoming /opt/pihome-hub-web/current'
+```
+
+### What the hub does with it
+
+Everything it does not answer itself is answered by this bundle, and a navigation to a path
+with no file behind it gets `index.html` — so a URL held in the address bar survives a
+refresh. A _missing asset_ is still a 404: the fallback is conditional on the request
+accepting `text/html`, because answering `/assets/index-C7kKkJch.js` with an HTML document
+would be served as JavaScript and fail as a syntax error somewhere inside it, which says
+nothing about the file being absent.
+
+The hub's own paths are never shadowed. It reads the first segment of every route it
+registers and refuses to hand those to the bundle, so a mistyped `/v1` path stays a 404 from
+the API rather than becoming a page that makes every route look like it exists.
+
+### Testing the script
+
+Deployment scripts fail where nobody is watching — on a Pi, over ssh, with the previous
+bundle already replaced. [`deploy/test-install.sh`](deploy/test-install.sh) therefore runs
+the real thing against a throwaway filesystem: a real symlink flip, real pruning, and each
+state `hub.env` can be in. CI runs it on every push; locally it wants a container, and
+refuses to run without one being implied:
+
+```bash
+docker run --rm -v "$PWD:/w:ro" -w /w debian:stable-slim \
+    env PIHOME_WEB_DEPLOY_TEST=1 bash deploy/test-install.sh
+```
+
 ## Project layout
 
 ```
@@ -231,7 +303,9 @@ index.html                      the page Vite serves and builds
 vite.config.ts                  build, dev proxy and test configuration
 eslint.config.js                lint rules, type-aware over src and config
 public/favicon.svg              theme-aware favicon
-.github/workflows/ci.yml        format, lint, types, tests, build
+.github/workflows/ci.yml        format, lint, types, tests, build, deployment
+deploy/install.sh               install a built bundle on the Pi and flip to it
+deploy/test-install.sh          run that against a throwaway filesystem
 ```
 
 Each component sits beside its own `.test.tsx`, and beside its own `.module.css` unless the
@@ -239,27 +313,27 @@ styles are genuinely shared.
 
 ## Roadmap
 
-| Phase | Scope                                                            | Status         |
-| ----- | ---------------------------------------------------------------- | -------------- |
-| 1     | Vite build, strict TypeScript, Vitest and Testing Library        | ✅ done        |
-| 2     | Typed API client, relay list, loading and failure states         | ✅ done        |
-| 3     | ESLint, Prettier and CI                                          | ✅ done        |
-| 4     | Relay switching, optimistic writes, polling                      | ✅ done        |
-| 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done        |
-| 6     | Automation rules, read-only                                      | ✅ done        |
-| 7     | Getting this served somewhere, and authenticating a real browser | partly blocked |
-| 8     | Users, roles and device administration                           | blocked        |
+| Phase | Scope                                                            | Status  |
+| ----- | ---------------------------------------------------------------- | ------- |
+| 1     | Vite build, strict TypeScript, Vitest and Testing Library        | ✅ done |
+| 2     | Typed API client, relay list, loading and failure states         | ✅ done |
+| 3     | ESLint, Prettier and CI                                          | ✅ done |
+| 4     | Relay switching, optimistic writes, polling                      | ✅ done |
+| 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done |
+| 6     | Automation rules, read-only                                      | ✅ done |
+| 7     | Getting this served somewhere, and authenticating a real browser | ✅ done |
+| 8     | Users, roles and device administration                           | next    |
 
 Sensors moved ahead of authentication because authentication turned out to have nothing to
-build against. That has half changed. The hub now issues sessions — `POST /v1/session` sets a
-cookie, `GET` and `DELETE` report and clear it — so authenticating a real browser is work this
-repository can start. Serving the bundle is not: the hub still serves no static files, and that
-half of Phase 7 waits on it.
+build against. Both halves of Phase 7 have since arrived: the hub issues sessions — `POST
+/v1/session` sets a cookie, `GET` and `DELETE` report and clear it — and it serves static
+files from `PIHOME_WEB_ROOT`, which is what the deployment above points at.
 
-Phase 8 stays blocked outright. The hub stores a role and reports it on the session, but no
-route yet enforces one, so there are still no permissions to build a client against — and
-designing for permissions the server cannot describe would mean guessing at its API and
-rewriting later.
+Phase 8 is no longer blocked. The hub enforces roles on `/v1` — a read takes any account, a
+write takes `operator` or `admin`, and a cookie-authenticated write carries a CSRF header —
+so there are real permissions to build against rather than a role that is only reported. The
+dev proxy no longer attaches an API key either, which was the other half of the problem: a
+`viewer` reaching the hub that way was authorised by the key and not by their role.
 
 ## License
 
