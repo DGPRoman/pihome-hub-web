@@ -16,6 +16,16 @@ export type HubErrorKind =
   | 'unauthorized'
   | 'rate-limited'
   | 'not-found'
+  /**
+   * The hub understood the request, and this account may not make it.
+   *
+   * Distinct from `malformed` because the two ask different things of whoever is
+   * reading. `malformed` says this app sent something wrong and there is nothing
+   * a person can do about it; this says the request was fine and the account was
+   * not — which is actionable, by logging in as somebody else or asking an admin
+   * for a role. Collapsing them told a `viewer` that the app was broken.
+   */
+  | 'forbidden'
   /** The hub refused the request this app sent: a 422, or a 4xx it does not model. */
   | 'malformed'
   /**

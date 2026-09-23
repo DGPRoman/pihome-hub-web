@@ -38,6 +38,9 @@ describe('createQueryClient', () => {
     'rate-limited': false,
     'not-found': false,
     malformed: false,
+    // A role does not change between two attempts a few hundred milliseconds
+    // apart, and each one is another failure the hub's limiter counts.
+    forbidden: false,
     // The hub answered and the answer was unusable. On a read another go might
     // work; on a write this kind means the write already happened, and a retry
     // would be a second one.

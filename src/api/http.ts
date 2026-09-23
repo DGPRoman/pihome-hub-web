@@ -173,6 +173,16 @@ function errorForResponse(response: Response): HubError {
   switch (status) {
     case 401:
       return new HubError('unauthorized', 'The hub rejected the API key.', status)
+    case 403:
+      // The hub answers 403 for two things: a role that is not enough, and a
+      // cookie-authenticated write with no CSRF header. Only the first can happen
+      // here — every write this client makes carries the header unconditionally,
+      // which session.test.ts holds it to — so naming the role is not a guess.
+      return new HubError(
+        'forbidden',
+        'This account is not allowed to do that. Ask an admin, or log in as somebody who is.',
+        status,
+      )
     case 404:
       return new HubError('not-found', 'The hub has no record of that.', status)
     case 422:
