@@ -1,4 +1,5 @@
 import styles from './App.module.css'
+import { DevicePanel } from './components/DevicePanel'
 import { LoginForm } from './components/LoginForm'
 import { RelayPanel } from './components/RelayPanel'
 import { RulePanel } from './components/RulePanel'
@@ -43,6 +44,7 @@ export function App() {
         <>
           <RelayPanel />
           <SensorPanel />
+          <DevicePanel />
           <RulePanel />
         </>
       )}

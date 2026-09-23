@@ -1,0 +1,78 @@
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background-color: var(--color-surface);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.label {
+  font-weight: 500;
+}
+
+.badge {
+  padding: 0 0.375rem;
+  border: 1px solid currentColor;
+  border-radius: 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* A fault, and the only one of the four standings that is. The badge's shape, so
+   the row still scans as a row, and its own colour so the one thing worth acting
+   on does not read at the same weight as "not polled yet". */
+.fault {
+  padding: 0 0.375rem;
+  border: 1px solid currentColor;
+  border-radius: 0.25rem;
+  color: var(--color-danger);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.readings {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: start;
+  gap: 0 var(--space-3);
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.pair {
+  display: contents;
+}
+
+.term {
+  color: var(--color-text-muted);
+  font-family: ui-monospace, monospace;
+}
+
+.value {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
