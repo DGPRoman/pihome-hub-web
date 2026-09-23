@@ -9,6 +9,15 @@ import styles from './RelayRow.module.css'
 
 interface RelayRowProps {
   readonly relay: Relay
+  /**
+   * Element saying why this switch cannot be used, or `null` when it can.
+   *
+   * Doubles as the answer to whether it can: a row does not ask the session for
+   * itself, because the reason has to be rendered once for the section and the
+   * switch has to point at that element. Two sources for one fact would be two
+   * things to keep in step.
+   */
+  readonly describedBy?: string | null
 }
 
 /**
@@ -18,10 +27,11 @@ interface RelayRowProps {
  * pending state: one shared mutation would report `isPending` for all of them, so
  * flipping the porch light would grey out the gate light too.
  */
-export function RelayRow({ relay }: RelayRowProps) {
+export function RelayRow({ relay, describedBy = null }: RelayRowProps) {
   const setRelay = useSetRelay()
   const queryClient = useQueryClient()
   const noteId = useId()
+  const readOnly = describedBy !== null
 
   // The hub accepted the write and then answered unreadably, so what the switch
   // shows is this app's guess rather than something the hub reported. True until
@@ -62,11 +72,28 @@ export function RelayRow({ relay }: RelayRowProps) {
         // The press has to be refused in the handler instead, because
         // `aria-disabled` is a claim about the control and not a rule the browser
         // enforces.
-        aria-disabled={setRelay.isPending}
-        {...(unconfirmed ? { 'aria-describedby': noteId } : {})}
+        // `aria-disabled` for the role too, and for the same reason as for a write
+        // in flight: a `disabled` control is not focusable, so a viewer could not
+        // reach it to find out why it is unavailable. Unreachable and unexplained
+        // is the one combination worth avoiding — see the panel's note.
+        aria-disabled={setRelay.isPending || readOnly}
+        // Both, when there are both: the doubt about this switch and the reason
+        // the section cannot be used are different things to say, and a reader
+        // arriving here needs whichever apply.
+        {...(unconfirmed || readOnly
+          ? {
+              'aria-describedby': [unconfirmed ? noteId : null, describedBy]
+                .filter((id) => id !== null)
+                .join(' '),
+            }
+          : {})}
         className={styles.control}
         onClick={() => {
-          if (setRelay.isPending) {
+          // `aria-disabled` is a claim about the control, not a rule the browser
+          // enforces, so both refusals happen here. The hub would refuse the
+          // write anyway; not sending it spares the reader a round trip and the
+          // hub's failure limiter a count against this browser.
+          if (setRelay.isPending || readOnly) {
             return
           }
           // The desired state, not a toggle: see setRelay in the API layer.

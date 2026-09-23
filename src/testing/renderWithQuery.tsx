@@ -2,7 +2,32 @@ import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { render, type RenderResult } from '@testing-library/react'
 import type { ReactNode } from 'react'
 
+import type { Role, Session } from '../api/types'
+import { sessionKeys } from '../hooks/queryKeys'
 import { createQueryClient } from '../queryClient'
+
+/** A session for a given role, for a test that needs one to exist. */
+export function sessionAs(role: Role): Session {
+  return {
+    username: role,
+    role,
+    // Far enough out that nothing under test is near it. Expiry is the session
+    // layer's subject, not every component's.
+    expiresAt: new Date('2099-01-01T00:00:00Z'),
+  }
+}
+
+export interface RenderWithQueryOptions {
+  /**
+   * Who to render as, written into the cache before the first render.
+   *
+   * Omitted means the session query is left alone — which is what a test about
+   * logging in wants, and is why this is not defaulted to somebody. A component
+   * that reads the role gets `undefined` then, and treats it as the least it
+   * could be.
+   */
+  readonly session?: Session | null
+}
 
 /**
  * Render inside a fresh query client.
@@ -21,7 +46,10 @@ import { createQueryClient } from '../queryClient'
  * What is under test here is the app's behaviour, not the client's schedule. The
  * schedule is tested directly, where it is configured.
  */
-export function renderWithQuery(ui: ReactNode): RenderResult & { queryClient: QueryClient } {
+export function renderWithQuery(
+  ui: ReactNode,
+  options: RenderWithQueryOptions = {},
+): RenderResult & { queryClient: QueryClient } {
   // The shipped client, with its schedule replaced. Built by createQueryClient
   // rather than from scratch because the caches it installs carry behaviour the
   // app depends on — a 401 from anything records that nobody is logged in — and a
@@ -33,6 +61,13 @@ export function renderWithQuery(ui: ReactNode): RenderResult & { queryClient: Qu
     queries: { retry: false, refetchInterval: false, staleTime: Infinity },
     mutations: { retry: false },
   })
+
+  // Seeded before the first render rather than after it. A component that decides
+  // what to show from the role decides it on the way in, and a session written
+  // afterwards would be a second render the test is not looking at.
+  if (options.session !== undefined) {
+    queryClient.setQueryData(sessionKeys.current, options.session)
+  }
 
   const rendered = render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
 

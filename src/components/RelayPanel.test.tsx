@@ -5,7 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HubError } from '../api/errors'
 import * as relaysApi from '../api/relays'
 import type { Relay } from '../api/types'
-import { renderWithQuery } from '../testing/renderWithQuery'
+import { CANNOT_CHANGE_THE_HOUSE } from '../lib/roles'
+import { renderWithQuery, sessionAs } from '../testing/renderWithQuery'
 import { RelayPanel } from './RelayPanel'
 
 const PORCH_OFF = { id: 'porch-light', label: 'Porch light', on: false }
@@ -32,11 +33,22 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/**
+ * Render the panel as somebody who may switch a circuit.
+ *
+ * Most of what follows is about what a write *does*, which needs an account
+ * allowed to make one. Who that is gets said here rather than in each test, and
+ * the tests that are about the role say so themselves.
+ */
+function renderAsOperator() {
+  return renderWithQuery(<RelayPanel />, { session: sessionAs('operator') })
+}
+
 describe('RelayPanel', () => {
   it('is labelled by its heading', () => {
     vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([])
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
 
     expect(screen.getByRole('region', { name: 'Relays' })).toBeInTheDocument()
   })
@@ -44,7 +56,7 @@ describe('RelayPanel', () => {
   it('announces that it is loading while the first read is in flight', () => {
     vi.spyOn(relaysApi, 'fetchRelays').mockReturnValue(deferred<readonly Relay[]>().promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
 
     expect(screen.getByRole('status')).toHaveTextContent('Reading relay state')
   })
@@ -52,7 +64,7 @@ describe('RelayPanel', () => {
   it('shows the relays once they arrive', async () => {
     vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF, GATE_OFF])
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
 
     expect(await screen.findByRole('switch', { name: 'Porch light' })).toBeInTheDocument()
     expect(screen.getAllByRole('switch')).toHaveLength(2)
@@ -68,7 +80,7 @@ describe('RelayPanel', () => {
   it('distinguishes a hub with no relays from a hub that could not be read', async () => {
     vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([])
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
 
     expect(await screen.findByText(/no relays are configured/i)).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
@@ -79,7 +91,7 @@ describe('RelayPanel', () => {
       new HubError('offline', 'The hub did not answer. Is it running?'),
     )
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
 
     await waitFor(() => {
       expect(screen.getByRole('alert')).toHaveTextContent('The hub did not answer')
@@ -92,7 +104,7 @@ describe('RelayPanel', () => {
     const write = deferred<Relay>()
     vi.spyOn(relaysApi, 'setRelay').mockReturnValue(write.promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
     await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
 
     // The write has not resolved. What is on screen is the optimistic value,
@@ -118,7 +130,7 @@ describe('RelayPanel', () => {
     const write = deferred<Relay>()
     vi.spyOn(relaysApi, 'setRelay').mockReturnValue(write.promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
     await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
 
     const porch = () => screen.getByRole('switch', { name: 'Porch light' })
@@ -144,7 +156,7 @@ describe('RelayPanel', () => {
     const write = deferred<Relay>()
     vi.spyOn(relaysApi, 'setRelay').mockReturnValue(write.promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
     await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
 
     const porch = () => screen.getByRole('switch', { name: 'Porch light' })
@@ -171,7 +183,7 @@ describe('RelayPanel', () => {
     const write = deferred<readonly Relay[]>()
     vi.spyOn(relaysApi, 'setAllRelays').mockReturnValue(write.promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
     await userEvent.click(await screen.findByRole('button', { name: 'All off' }))
 
     const porch = () => screen.getByRole('switch', { name: 'Porch light' })
@@ -201,7 +213,7 @@ describe('RelayPanel', () => {
     vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF, GATE_OFF])
     vi.spyOn(relaysApi, 'setRelay').mockReturnValue(deferred<Relay>().promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
     await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
 
     // Each row owns its own mutation, so a shared pending flag cannot grey out
@@ -223,7 +235,7 @@ describe('RelayPanel', () => {
   it('offers no bulk control until the hub has said what there is to switch off', () => {
     vi.spyOn(relaysApi, 'fetchRelays').mockReturnValue(deferred<readonly Relay[]>().promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
 
     expect(screen.queryByRole('button', { name: 'All off' })).not.toBeInTheDocument()
   })
@@ -233,7 +245,7 @@ describe('RelayPanel', () => {
     const write = deferred<readonly Relay[]>()
     vi.spyOn(relaysApi, 'setAllRelays').mockReturnValue(write.promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
     await userEvent.click(await screen.findByRole('button', { name: 'All off' }))
 
     await waitFor(() => {
@@ -252,7 +264,7 @@ describe('RelayPanel', () => {
     const write = deferred<readonly Relay[]>()
     vi.spyOn(relaysApi, 'setAllRelays').mockReturnValue(write.promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
     await userEvent.click(await screen.findByRole('button', { name: 'All off' }))
 
     const porch = () => screen.getByRole('switch', { name: 'Porch light' })
@@ -283,7 +295,7 @@ describe('RelayPanel', () => {
     const write = deferred<Relay>()
     vi.spyOn(relaysApi, 'setRelay').mockReturnValue(write.promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
     await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
 
     write.reject(new HubError('unauthorized', 'The hub rejected the API key.', 401))
@@ -309,7 +321,7 @@ describe('RelayPanel', () => {
     vi.spyOn(relaysApi, 'setRelay').mockReturnValue(one.promise)
     vi.spyOn(relaysApi, 'setAllRelays').mockReturnValue(all.promise)
 
-    renderWithQuery(<RelayPanel />)
+    renderAsOperator()
     await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
     await userEvent.click(screen.getByRole('button', { name: 'All off' }))
 
@@ -337,7 +349,7 @@ describe('RelayPanel', () => {
     fetch.mockResolvedValueOnce([PORCH_OFF])
     fetch.mockRejectedValue(new HubError('offline', 'The hub did not answer. Is it running?'))
 
-    const { queryClient } = renderWithQuery(<RelayPanel />)
+    const { queryClient } = renderAsOperator()
     expect(await screen.findByRole('switch', { name: 'Porch light' })).toBeInTheDocument()
 
     await queryClient.refetchQueries({ queryKey: ['relays'] })
@@ -346,5 +358,166 @@ describe('RelayPanel', () => {
     // stale; throwing it away would discard something true.
     expect(await screen.findByRole('alert')).toHaveTextContent('last state the hub reported')
     expect(screen.getByRole('switch', { name: 'Porch light' })).toBeInTheDocument()
+  })
+  /**
+   * What each role is shown.
+   *
+   * The hub refuses a write from a viewer whatever this does, so none of this is
+   * a security boundary — it is the difference between being told no after
+   * pressing something and being told beforehand why it is not yours to press.
+   */
+  describe('as a viewer', () => {
+    function renderAsViewer() {
+      return renderWithQuery(<RelayPanel />, { session: sessionAs('viewer') })
+    }
+
+    it('still shows every switch', async () => {
+      // Shown, not hidden. A control that vanishes says the feature does not
+      // exist, and somebody who has been given the wrong role would have no way
+      // to tell that from a hub with no relays configured.
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF, GATE_OFF])
+
+      renderAsViewer()
+
+      expect(await screen.findByRole('switch', { name: 'Porch light' })).toBeInTheDocument()
+      expect(screen.getAllByRole('switch')).toHaveLength(2)
+    })
+
+    it('marks them unavailable without taking them out of the tab order', async () => {
+      // `aria-disabled`, not `disabled`: a disabled control cannot be focused, so
+      // the description explaining it would be unreachable by the people most
+      // likely to need it.
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF])
+
+      renderAsViewer()
+      const relay = await screen.findByRole('switch', { name: 'Porch light' })
+
+      expect(relay).toHaveAttribute('aria-disabled', 'true')
+      expect(relay).not.toBeDisabled()
+    })
+
+    it('explains why, as the accessible description of the switch itself', async () => {
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF])
+
+      renderAsViewer()
+      const relay = await screen.findByRole('switch', { name: 'Porch light' })
+
+      expect(relay).toHaveAccessibleDescription(CANNOT_CHANGE_THE_HOUSE)
+      expect(screen.getByText(CANNOT_CHANGE_THE_HOUSE)).toBeInTheDocument()
+    })
+
+    it('says it once for the section, not once per relay', async () => {
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF, GATE_OFF])
+
+      renderAsViewer()
+      await screen.findByRole('switch', { name: 'Porch light' })
+
+      expect(screen.getAllByText(CANNOT_CHANGE_THE_HOUSE)).toHaveLength(1)
+    })
+
+    it('sends no write when a switch is pressed', async () => {
+      // The hub would refuse it. Not sending it spares the reader a round trip
+      // and the hub's failure limiter a count against this browser.
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF])
+      const setRelay = vi.spyOn(relaysApi, 'setRelay')
+
+      renderAsViewer()
+      await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
+
+      expect(setRelay).not.toHaveBeenCalled()
+    })
+
+    it('leaves the switch showing what the hub said', async () => {
+      // No optimistic flip on a press that was never sent.
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF])
+
+      renderAsViewer()
+      const relay = await screen.findByRole('switch', { name: 'Porch light' })
+      await userEvent.click(relay)
+
+      expect(relay).toHaveAttribute('aria-checked', 'false')
+    })
+
+    it('marks All off unavailable and explains that too', async () => {
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_ON])
+
+      renderAsViewer()
+      const allOff = await screen.findByRole('button', { name: 'All off' })
+
+      expect(allOff).toHaveAttribute('aria-disabled', 'true')
+      expect(allOff).toHaveAccessibleDescription(CANNOT_CHANGE_THE_HOUSE)
+    })
+
+    it('sends no bulk write either', async () => {
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_ON])
+      const setAllRelays = vi.spyOn(relaysApi, 'setAllRelays')
+
+      renderAsViewer()
+      await userEvent.click(await screen.findByRole('button', { name: 'All off' }))
+
+      expect(setAllRelays).not.toHaveBeenCalled()
+    })
+  })
+
+  describe.each(['operator', 'admin'] as const)('as %s', (role) => {
+    function renderAsRole() {
+      return renderWithQuery(<RelayPanel />, { session: sessionAs(role) })
+    }
+
+    it('the switches are usable and nothing is explained away', async () => {
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF])
+
+      renderAsRole()
+      const relay = await screen.findByRole('switch', { name: 'Porch light' })
+
+      expect(relay).toHaveAttribute('aria-disabled', 'false')
+      expect(screen.queryByText(CANNOT_CHANGE_THE_HOUSE)).not.toBeInTheDocument()
+    })
+
+    it('a press reaches the hub', async () => {
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF])
+      const setRelay = vi.spyOn(relaysApi, 'setRelay').mockResolvedValue(PORCH_ON)
+
+      renderAsRole()
+      await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
+
+      expect(setRelay).toHaveBeenCalledWith('porch-light', true)
+    })
+  })
+
+  describe('when the hub refuses a write this client thought was allowed', () => {
+    /**
+     * An admin lowering somebody to `viewer` while their page is open, which the
+     * hub applies on the very next request — it re-reads the account every time.
+     * The client's own check said yes, because it is working from a session read
+     * before that happened.
+     */
+    it('reports it as a refusal of the account, not as a broken app', async () => {
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF])
+      vi.spyOn(relaysApi, 'setRelay').mockRejectedValue(
+        new HubError('forbidden', 'This account is not allowed to do that. Ask an admin.', 403),
+      )
+
+      renderAsOperator()
+      await userEvent.click(await screen.findByRole('switch', { name: 'Porch light' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('not allowed')
+      expect(screen.getByRole('alert')).not.toHaveTextContent('403')
+    })
+
+    it('puts the switch back where the hub last said it was', async () => {
+      vi.spyOn(relaysApi, 'fetchRelays').mockResolvedValue([PORCH_OFF])
+      vi.spyOn(relaysApi, 'setRelay').mockRejectedValue(
+        new HubError('forbidden', 'This account is not allowed to do that.', 403),
+      )
+
+      renderAsOperator()
+      const relay = await screen.findByRole('switch', { name: 'Porch light' })
+      await userEvent.click(relay)
+
+      await waitFor(() => {
+        expect(relay).toHaveAttribute('aria-checked', 'false')
+      })
+    })
   })
 })

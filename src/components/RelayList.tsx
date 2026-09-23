@@ -6,10 +6,16 @@ import { RelayRow } from './RelayRow'
 
 interface RelayListProps {
   readonly relays: readonly Relay[]
+  /**
+   * Element explaining why these switches are unavailable, or `null` when they
+   * are not. Threaded through rather than read here: one explanation is rendered
+   * for the section, and every switch in it describes itself with that same id.
+   */
+  readonly describedBy?: string | null
 }
 
 /** The relays, as a list of switches. */
-export function RelayList({ relays }: RelayListProps) {
+export function RelayList({ relays, describedBy = null }: RelayListProps) {
   return (
     <ul className={styles.list}>
       {relays.map((relay) => (
@@ -17,7 +23,7 @@ export function RelayList({ relays }: RelayListProps) {
         // state and in-flight mutation attached to it, across renders. The id is
         // stable and comes from the hub; an index would be reassigned the moment
         // the list is reordered, handing one row's pending switch to another.
-        <RelayRow key={relay.id} relay={relay} />
+        <RelayRow key={relay.id} relay={relay} describedBy={describedBy} />
       ))}
     </ul>
   )
