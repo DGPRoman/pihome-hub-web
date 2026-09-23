@@ -520,4 +520,54 @@ describe('RelayPanel', () => {
       })
     })
   })
+  /**
+   * Where the pressed switch leaves the keyboard.
+   *
+   * RelayRow already holds the half of this it can see: a switch stays focusable
+   * while its own write is in flight. The other half is only visible from here,
+   * because it is about the list — the reconciling read answers, the panel
+   * re-renders every row, and whether focus survives that depends on React
+   * matching each relay to the DOM node it already had.
+   */
+  describe('keyboard focus across a write', () => {
+    it('stays on the switch that was pressed', async () => {
+      const fetchRelays = vi.spyOn(relaysApi, 'fetchRelays')
+      fetchRelays.mockResolvedValue([PORCH_OFF, GATE_OFF])
+      vi.spyOn(relaysApi, 'setRelay').mockResolvedValue(PORCH_ON)
+
+      renderAsOperator()
+      const porch = await screen.findByRole('switch', { name: 'Porch light' })
+
+      // What the reconciling read will answer with, which re-renders the list.
+      fetchRelays.mockResolvedValue([PORCH_ON, GATE_OFF])
+      await userEvent.click(porch)
+
+      await waitFor(() => {
+        expect(porch).toHaveAttribute('aria-checked', 'true')
+      })
+      expect(porch).toHaveFocus()
+    })
+
+    it('stays on it even when the list comes back in a different order', async () => {
+      // The hub returns relays in configuration order and nothing in its contract
+      // promises that never changes. This is the case that tells a stable key from
+      // a positional one: with `key={index}` React reuses the first row's DOM node
+      // for whatever is now first, and the focus goes with the node rather than
+      // with the relay.
+      const fetchRelays = vi.spyOn(relaysApi, 'fetchRelays')
+      fetchRelays.mockResolvedValue([PORCH_OFF, GATE_OFF])
+      vi.spyOn(relaysApi, 'setRelay').mockResolvedValue(PORCH_ON)
+
+      renderAsOperator()
+      const porch = await screen.findByRole('switch', { name: 'Porch light' })
+
+      fetchRelays.mockResolvedValue([GATE_OFF, PORCH_ON])
+      await userEvent.click(porch)
+
+      await waitFor(() => {
+        expect(screen.getAllByRole('switch')[0]).toHaveAccessibleName('Gate light')
+      })
+      expect(screen.getByRole('switch', { name: 'Porch light' })).toHaveFocus()
+    })
+  })
 })
