@@ -82,6 +82,60 @@ export interface Sensor {
 }
 
 /**
+ * A device the hub polls, and what it last found.
+ *
+ * Devices and sensors are opposite halves of the same problem, and the difference
+ * decides every field here: a sensor pushes, a device is polled. Because the hub
+ * is the one asking, it is also the one that knows whether the answer arrived —
+ * so where a sensor's freshness has to be inferred from timestamps, a device's is
+ * something the hub states.
+ */
+export interface Device {
+  readonly id: string
+  readonly label: string
+  /** What sort of device it is, which decides the path the hub polls. */
+  readonly kind: string
+  /** Where it last said it was, or `null` if it has never announced. */
+  readonly address: string | null
+  /** Whatever the device calls its build. Recorded by the hub, never interpreted. */
+  readonly firmware: string | null
+  readonly announcedAt: Date | null
+  /**
+   * Whether the last poll succeeded.
+   *
+   * `null` means never polled, which is **not** the same as polled and
+   * unreachable. A device nobody has powered on yet and a device that has stopped
+   * answering need different things done about them.
+   */
+  readonly reachable: boolean | null
+  /** When the hub last asked. */
+  readonly lastPolledAt: Date | null
+  /** When it last answered, which is the date on `state`. */
+  readonly lastSeenAt: Date | null
+  /**
+   * When the current run of failures began, or `null` while it is answering.
+   *
+   * The start of the run rather than the latest failure: one dropped packet on
+   * wifi is ordinary, an hour of them is not, and only the second is worth acting
+   * on.
+   */
+  readonly unreachableSince: Date | null
+  /** Why the last poll failed, in the hub's words. */
+  readonly lastError: string | null
+  /**
+   * The device's own status document, exactly as it served it.
+   *
+   * Deliberately untyped past "an object". What the fields mean is the device's
+   * contract to state, not this client's — modelling them here would make every
+   * field a device adds a change in two repositories instead of one.
+   *
+   * Kept by the hub across a failed poll, so this can be a real reading from
+   * before the device went quiet. Shown with its age rather than as current.
+   */
+  readonly state: Readonly<Record<string, unknown>> | null
+}
+
+/**
  * What an account may do, as the hub reports it.
  *
  * A closed set, and the client decides from it rather than from a message: a

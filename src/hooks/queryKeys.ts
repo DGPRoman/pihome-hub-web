@@ -14,6 +14,10 @@ export const sensorKeys = {
   all: ['sensors'] as const,
 }
 
+export const deviceKeys = {
+  all: ['devices'] as const,
+}
+
 export const ruleKeys = {
   all: ['automation-rules'] as const,
 }
