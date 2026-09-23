@@ -4,14 +4,14 @@ Web interface for [pihome-hub](https://github.com/DGPRoman/pihome-hub), the HTTP
 plane for a Raspberry Pi wired to relay-switched circuits.
 
 The hub speaks a small REST API. This is the browser client for it: a page that switches the
-relays, shows what the sensors last reported, and lists the rules wiring the two together —
-without reaching for `curl`.
+relays, shows what the sensors last reported, says whether the hub can still reach the devices
+it polls, and lists the rules wiring them together — without reaching for `curl`.
 
-> **Status: early, and development-only.** Relays, sensors and automation rules work, with
-> polling, optimistic writes and honest failure states. There is no production deployment yet:
-> the hub serves no
-> static files, so nothing hosts this bundle, and the browser is authenticated only by the dev
-> proxy. Both are the next problems — see [Roadmap](#roadmap).
+> **Status: early.** Relays, sensors, automation rules and devices all read, with polling,
+> optimistic writes and honest failure states. The bundle is served by the hub itself and the
+> browser logs in for itself, so a role now restricts this client and not just a session. What
+> is missing is administration: the hub serves no route for creating an account or declaring a
+> device, so neither can be done from here — see [Roadmap](#roadmap).
 
 ## Design notes
 
@@ -289,11 +289,12 @@ src/
 ├── App.tsx                     application shell
 ├── queryClient.ts              cache, polling and retry policy; error type registration
 ├── api/
-│   ├── types.ts                Relay and Sensor — the app's own shapes
+│   ├── types.ts                Relay, Sensor and Device — the app's own shapes
 │   ├── errors.ts               HubError and its closed set of causes
 │   ├── http.ts                 one request path, one failure type
 │   ├── relays.ts               GET and PUT, one relay or all, with runtime validation
 │   ├── sensors.ts              GET, with runtime validation and wire mapping
+│   ├── devices.ts              GET, the devices the hub polls
 │   └── automation.ts           GET, the configured rules
 ├── hooks/
 │   ├── queryKeys.ts            cache keys, shared by query and mutation
@@ -302,6 +303,7 @@ src/
 │   ├── useSetRelay.ts          the relay write, optimistic with rollback
 │   ├── useSetAllRelays.ts      the same, for every relay at once
 │   ├── useSensors.ts           the sensor read
+│   ├── useDevices.ts           the device read
 │   └── useRules.ts             the automation read
 ├── components/
 │   ├── DataPanel.tsx           loading, failure, stale and empty, once for all sections
@@ -312,12 +314,17 @@ src/
 │   ├── RelayRow.tsx            one relay, as an accessible switch
 │   ├── SensorPanel.tsx         the sensor section
 │   ├── SensorList.tsx          the sensor list
-│   ├── SensorRow.tsx           one device: readings, freshness, or neither
+│   ├── SensorRow.tsx           one sensor: readings, freshness, or neither
+│   ├── DevicePanel.tsx         the device section
+│   ├── DeviceList.tsx          the device list
+│   ├── DeviceRow.tsx           one device: where it is, and what it last said
 │   ├── RulePanel.tsx           the automation section
 │   ├── RuleList.tsx            the rule list
 │   └── RuleRow.tsx             one rule, in a sentence
 ├── lib/
 │   ├── roles.ts                what each role may do, ranked as the hub ranks it
+│   ├── freshness.ts            how far a single sensor reading can be trusted
+│   ├── devices.ts              where a device stands with the hub, in four answers
 │   └── time.ts                 relative times, as a pure function of two instants
 ├── styles/
 │   ├── global.css              design tokens and element defaults
@@ -347,7 +354,7 @@ styles are genuinely shared.
 | 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done     |
 | 6     | Automation rules, read-only                                      | ✅ done     |
 | 7     | Getting this served somewhere, and authenticating a real browser | ✅ done     |
-| 8     | Users, roles and device administration                           | in progress |
+| 8     | Users, roles and devices                                         | in progress |
 
 Sensors moved ahead of authentication because authentication turned out to have nothing to
 build against. Both halves of Phase 7 have since arrived: the hub issues sessions — `POST
@@ -361,12 +368,19 @@ app. The dev proxy no longer attaches an API key either, which was the other hal
 problem: a `viewer` reaching the hub that way was authorised by the key and not by their
 role.
 
-The rest of Phase 8 still waits on the hub, and this time for a plain reason: **there is no
-API for it.** Accounts exist only through `pihome-hub-admin` at a terminal on the Pi — the
-hub serves no `/v1/users`, so creating an account, changing a role or disabling one cannot
-be built here at all. Device administration is the same shape: the hub has only just grown
-a device registry, and it is read-only. Both need hub routes before there is anything to
-write a client against, which is the same reason phases 7 and 8 waited before.
+Devices followed, as far as the hub allows. `GET /v1/devices` reports each declared device
+and how the last poll went, so the page says whether the hub can still reach the board across
+a PC's power header — and, when it cannot, what it last said and how long ago. The hub keeps
+that reading across a failed poll on purpose, and showing it with its age rather than hiding
+it is the same principle as the sensor panel's: absent, stale and zero are three different
+things.
+
+What is left of Phase 8 waits on the hub, for a plain reason: **there is no API for it.**
+Accounts exist only through `pihome-hub-admin` at a terminal on the Pi — the hub serves no
+`/v1/users`, so creating an account, changing a role or disabling one cannot be built here at
+all. Declaring a device is the same shape: which devices exist is a file the hub reads, and
+`/v1/devices` only reads it back. Both need hub routes before there is anything to write a
+client against, which is the same reason phases 7 and 8 waited before.
 
 ## License
 
