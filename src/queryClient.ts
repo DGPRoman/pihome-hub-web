@@ -53,6 +53,9 @@ const RETRYABLE: Readonly<Record<HubErrorKind, boolean>> = {
   'rate-limited': false,
   'not-found': false,
   malformed: false,
+  // The account is not allowed. It will not become allowed by asking again, and
+  // each attempt is another failure the hub's limiter counts against this client.
+  forbidden: false,
   // The hub answered and the answer was unusable. A second read may well succeed,
   // but on a write this kind means the write already happened, and the retry
   // would be a second one — so no.

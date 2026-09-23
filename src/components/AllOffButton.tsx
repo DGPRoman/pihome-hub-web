@@ -5,6 +5,8 @@ import styles from './AllOffButton.module.css'
 
 interface AllOffButtonProps {
   readonly relays: readonly Relay[]
+  /** Element saying why this cannot be used, or `null` when it can. */
+  readonly describedBy?: string | null
 }
 
 /**
@@ -15,9 +17,10 @@ interface AllOffButtonProps {
  * while turning everything off on the way out is the whole reason this exists.
  * Asymmetry is the point: the reachable bulk action is the safe direction.
  */
-export function AllOffButton({ relays }: AllOffButtonProps) {
+export function AllOffButton({ relays, describedBy = null }: AllOffButtonProps) {
   const setAll = useSetAllRelays()
   const anythingOn = relays.some((relay) => relay.on)
+  const readOnly = describedBy !== null
 
   return (
     <>
@@ -27,9 +30,19 @@ export function AllOffButton({ relays }: AllOffButtonProps) {
         // Nothing on means nothing to do. The request would be harmless — naming
         // the state makes it idempotent — but a button that stays live while it
         // cannot change anything teaches people to distrust it.
+        //
+        // `disabled` here and `aria-disabled` below, which is not an
+        // inconsistency: "nothing to switch off" needs no explaining and lasts
+        // until somebody switches something on, while "not your account" is a
+        // standing fact that has to stay reachable to be read.
         disabled={!anythingOn || setAll.isPending}
+        aria-disabled={readOnly}
         aria-busy={setAll.isPending}
+        {...(readOnly ? { 'aria-describedby': describedBy } : {})}
         onClick={() => {
+          if (readOnly) {
+            return
+          }
           setAll.mutate(false)
         }}
       >

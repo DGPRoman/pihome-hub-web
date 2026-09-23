@@ -43,6 +43,28 @@ somewhere deep in a component. The client checks each field and builds its own o
 unrecognised data cannot ride along. Every request function is held to one failure type, so a
 query error always really is a `HubError`.
 
+**A role is shown, not enforced, and never hidden.** The hub decides what an account may
+do and would refuse a `viewer`'s write whatever this app did. What the app decides is only
+what to render — and it renders the controls either way. A switch that disappears for a
+`viewer` claims the feature does not exist, which is indistinguishable from a hub with no
+relays configured; one that is visible, marked unavailable and says why tells somebody what
+to go and ask for. The reason is written once per section and every control in it points at
+that same element, so it is the accessible description of the switch rather than a sentence
+somebody has to go and find.
+
+`aria-disabled`, not `disabled`: a disabled control cannot be focused, so the explanation
+would be unreachable by exactly the people most likely to need it. The press is refused in
+the handler instead, because `aria-disabled` is a claim about a control and not a rule the
+browser enforces.
+
+**A refusal is not a failure.** `403` is its own error kind. Collapsed into the generic 4xx
+message it read as "the hub rejected the request this app sent" — which told a `viewer` the
+app was broken when the app was fine and their role was the answer. The two ask different
+things of whoever is reading: one is a bug nobody can act on, the other is solved by asking
+an admin. The client's own check can also be out of date — an admin can lower a role while
+the page is open, and the hub applies that on the very next request — so both paths exist
+and the hub's answer is the one that decides.
+
 **Writes name the state they want.** Switching uses `PUT /v1/relays/{id}` with the desired
 state rather than the hub's `POST /toggle`, even though a switch is conceptually a toggle.
 Toggling is not idempotent: two clicks that race, or one request retried after a timeout,
@@ -147,8 +169,9 @@ development mode that grants more than production hides exactly the bugs this cl
 to avoid.
 
 The role you give yourself is worth choosing on purpose. An `operator` can switch relays; a
-`viewer` is shown the house and refused every write, which is a useful thing to look at
-once.
+`viewer` is shown the same house with the same switches, each marked unavailable and saying
+why — which is a useful thing to look at once, because it is what somebody given the wrong
+role will see and it should tell them what to ask for.
 
 Logging out, or letting the session expire, should return the page to the login form rather
 than leaving a stale house on screen.
@@ -274,6 +297,7 @@ src/
 │   └── automation.ts           GET, the configured rules
 ├── hooks/
 │   ├── queryKeys.ts            cache keys, shared by query and mutation
+│   ├── useMayChangeTheHouse.ts the role, as the one question the UI asks of it
 │   ├── useRelays.ts            the relay read
 │   ├── useSetRelay.ts          the relay write, optimistic with rollback
 │   ├── useSetAllRelays.ts      the same, for every relay at once
@@ -293,6 +317,7 @@ src/
 │   ├── RuleList.tsx            the rule list
 │   └── RuleRow.tsx             one rule, in a sentence
 ├── lib/
+│   ├── roles.ts                what each role may do, ranked as the hub ranks it
 │   └── time.ts                 relative times, as a pure function of two instants
 ├── styles/
 │   ├── global.css              design tokens and element defaults
@@ -313,27 +338,35 @@ styles are genuinely shared.
 
 ## Roadmap
 
-| Phase | Scope                                                            | Status  |
-| ----- | ---------------------------------------------------------------- | ------- |
-| 1     | Vite build, strict TypeScript, Vitest and Testing Library        | ✅ done |
-| 2     | Typed API client, relay list, loading and failure states         | ✅ done |
-| 3     | ESLint, Prettier and CI                                          | ✅ done |
-| 4     | Relay switching, optimistic writes, polling                      | ✅ done |
-| 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done |
-| 6     | Automation rules, read-only                                      | ✅ done |
-| 7     | Getting this served somewhere, and authenticating a real browser | ✅ done |
-| 8     | Users, roles and device administration                           | next    |
+| Phase | Scope                                                            | Status      |
+| ----- | ---------------------------------------------------------------- | ----------- |
+| 1     | Vite build, strict TypeScript, Vitest and Testing Library        | ✅ done     |
+| 2     | Typed API client, relay list, loading and failure states         | ✅ done     |
+| 3     | ESLint, Prettier and CI                                          | ✅ done     |
+| 4     | Relay switching, optimistic writes, polling                      | ✅ done     |
+| 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done     |
+| 6     | Automation rules, read-only                                      | ✅ done     |
+| 7     | Getting this served somewhere, and authenticating a real browser | ✅ done     |
+| 8     | Users, roles and device administration                           | in progress |
 
 Sensors moved ahead of authentication because authentication turned out to have nothing to
 build against. Both halves of Phase 7 have since arrived: the hub issues sessions — `POST
 /v1/session` sets a cookie, `GET` and `DELETE` report and clear it — and it serves static
 files from `PIHOME_WEB_ROOT`, which is what the deployment above points at.
 
-Phase 8 is no longer blocked. The hub enforces roles on `/v1` — a read takes any account, a
-write takes `operator` or `admin`, and a cookie-authenticated write carries a CSRF header —
-so there are real permissions to build against rather than a role that is only reported. The
-dev proxy no longer attaches an API key either, which was the other half of the problem: a
-`viewer` reaching the hub that way was authorised by the key and not by their role.
+Phase 8 has started with the half that had something to build against. The hub enforces
+roles on `/v1` — a read takes any account, a write takes `operator` or `admin` — so the UI
+reflects the role it was given, and a refusal reads as a refusal rather than as a broken
+app. The dev proxy no longer attaches an API key either, which was the other half of that
+problem: a `viewer` reaching the hub that way was authorised by the key and not by their
+role.
+
+The rest of Phase 8 still waits on the hub, and this time for a plain reason: **there is no
+API for it.** Accounts exist only through `pihome-hub-admin` at a terminal on the Pi — the
+hub serves no `/v1/users`, so creating an account, changing a role or disabling one cannot
+be built here at all. Device administration is the same shape: the hub has only just grown
+a device registry, and it is read-only. Both need hub routes before there is anything to
+write a client against, which is the same reason phases 7 and 8 waited before.
 
 ## License
 

@@ -143,8 +143,28 @@ describe('fetchRelays', () => {
     await expect(rejectionKind(fetchRelays())).resolves.toBe('unreadable')
   })
 
+  describe('a 403', () => {
+    it('is a refusal of the account, not of the request', async () => {
+      // It used to land in the unmodelled group below and read as `malformed` —
+      // "the hub rejected the request this app sent", which told a viewer the app
+      // was broken when the app was fine and their role was the answer.
+      stubFetch(jsonResponse({ detail: 'This account is not allowed to do that' }, 403))
+
+      await expect(rejectionKind(fetchRelays())).resolves.toBe('forbidden')
+    })
+
+    it('says what to do about it, and does not quote the number', async () => {
+      // The status is no use to whoever is reading: they cannot act on 403, and
+      // they can act on "ask an admin". Every modelled status says something
+      // specific instead, which is why none of them carry one.
+      stubFetch(jsonResponse({ detail: 'nope' }, 403))
+
+      await expect(fetchRelays()).rejects.toThrow('admin')
+      await expect(fetchRelays()).rejects.not.toThrow('403')
+    })
+  })
+
   describe.each([
-    [403, 'malformed', 'refused'],
     [409, 'malformed', 'refused'],
     [418, 'malformed', 'refused'],
     [500, 'server', 'failed'],
