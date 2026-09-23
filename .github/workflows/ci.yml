@@ -78,6 +78,22 @@ jobs:
       - name: Test
         run: npm test
 
+  deploy:
+    name: Deployment files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Lint the deployment scripts
+        run: shellcheck --severity=style deploy/install.sh deploy/test-install.sh
+
+      # Run for real rather than read. This script's failures happen on a Pi, over
+      # ssh, with the previous bundle already replaced — which is the worst place to
+      # find out that a path was wrong. The runner is a throwaway VM, so it installs
+      # into its /opt and writes its /etc the way it would on the real thing.
+      - name: Install a bundle onto a throwaway filesystem
+        run: sudo env PIHOME_WEB_DEPLOY_TEST=1 bash deploy/test-install.sh
+
   build:
     name: Build
     runs-on: ubuntu-latest
