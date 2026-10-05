@@ -1,0 +1,7 @@
+.code {
+  display: block;
+  width: 100%;
+  max-width: 16rem;
+  height: auto;
+  border-radius: var(--radius);
+}

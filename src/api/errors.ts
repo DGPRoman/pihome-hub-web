@@ -26,6 +26,15 @@ export type HubErrorKind =
    * for a role. Collapsing them told a `viewer` that the app was broken.
    */
   | 'forbidden'
+  /**
+   * The hub refused because of something already there: a name another account
+   * has, or an account that is disabled and so cannot be invited.
+   *
+   * Not `malformed`, for the same reason as `forbidden`. Nothing this app sent was
+   * wrong; what the request ran into is the state of the hub, which the person
+   * reading can see on the same screen and change.
+   */
+  | 'conflict'
   /** The hub refused the request this app sent: a 422, or a 4xx it does not model. */
   | 'malformed'
   /**

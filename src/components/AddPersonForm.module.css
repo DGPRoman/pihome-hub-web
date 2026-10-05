@@ -1,0 +1,83 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+
+.heading {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  font-size: 0.875rem;
+}
+
+.field input {
+  max-width: 20rem;
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: inherit;
+  font: inherit;
+}
+
+.field input[aria-invalid='true'] {
+  border-color: var(--color-danger);
+}
+
+/* Never removed, only replaced: a keyboard user needs to see where focus is. */
+.field input:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.rule,
+.ruleBroken {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  font-size: 0.8125rem;
+}
+
+.rule {
+  color: var(--color-text-muted);
+}
+
+.ruleBroken {
+  color: var(--color-danger);
+}
+
+.roles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 0.875rem;
+}
+
+.roles legend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+}
+
+.role {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 0.875rem;
+}

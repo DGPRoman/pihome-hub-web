@@ -1,0 +1,45 @@
+/* The secondary button every section uses. A switch is a different control and
+   keeps its own styles. */
+.button {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  color: inherit;
+  font: inherit;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.button:hover:not([aria-disabled='true']) {
+  background-color: var(--color-surface-raised);
+}
+
+/* Never removed, only replaced: a keyboard user needs to see where focus is. */
+.button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* aria-disabled rather than :disabled, so the button stays focusable while it
+   waits — see RelayRow for what a disabled one does to keyboard focus. */
+.button[aria-disabled='true'] {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.primary {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  color: #ffffff;
+}
+
+.primary:hover:not([aria-disabled='true']) {
+  background-color: var(--color-accent);
+  filter: brightness(1.1);
+}
+
+/* Destructive, and always paired with words that say so. */
+.danger {
+  color: var(--color-danger);
+}

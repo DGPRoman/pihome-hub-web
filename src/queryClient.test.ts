@@ -2,7 +2,15 @@ import { describe, expect, it } from 'vitest'
 
 import { HubError, type HubErrorKind } from './api/errors'
 import { REQUEST_TIMEOUT_MS } from './api/http'
-import { createQueryClient, MAX_RETRIES, POLL_INTERVAL_MS, STALE_TIME_MS } from './queryClient'
+import { sessionKeys } from './hooks/queryKeys'
+import {
+  createQueryClient,
+  MAX_RETRIES,
+  OFFERS_A_CREDENTIAL,
+  POLL_INTERVAL_MS,
+  STALE_TIME_MS,
+} from './queryClient'
+import { sessionAs } from './testing/renderWithQuery'
 
 /** The retry predicate the shipped client actually uses. */
 function retryPolicy(): (failureCount: number, error: HubError) => boolean {
@@ -41,6 +49,7 @@ describe('createQueryClient', () => {
     // A role does not change between two attempts a few hundred milliseconds
     // apart, and each one is another failure the hub's limiter counts.
     forbidden: false,
+    conflict: false,
     // The hub answered and the answer was unusable. On a read another go might
     // work; on a write this kind means the write already happened, and a retry
     // would be a second one.
@@ -82,5 +91,32 @@ describe('createQueryClient', () => {
     // A read is reusable for less time than the gap between polls, so a poll
     // always fetches rather than being served from cache and doing nothing.
     expect(STALE_TIME_MS).toBeLessThan(POLL_INTERVAL_MS)
+  })
+})
+
+describe('what a 401 from a write says about the session', () => {
+  async function failWithA401(meta?: typeof OFFERS_A_CREDENTIAL) {
+    const client = createQueryClient()
+    client.setQueryData(sessionKeys.current, sessionAs('admin'))
+
+    const mutation = client.getMutationCache().build(client, {
+      mutationFn: () => Promise.reject(new HubError('unauthorized', 'refused', 401)),
+      ...(meta === undefined ? {} : { meta }),
+    })
+    await mutation.execute(undefined).catch(() => undefined)
+
+    return client.getQueryData(sessionKeys.current)
+  }
+
+  it('records that nobody is logged in, for a write made with the session', async () => {
+    // The session ran out between two presses, and only the login form helps.
+    await expect(failWithA401()).resolves.toBeNull()
+  })
+
+  it('leaves the session alone, for a write that offered a credential of its own', async () => {
+    // An expired invitation link opened in a browser that is logged in already.
+    // The hub refused the token and left the cookie as it was; forgetting the
+    // session would show a login form to somebody who is still logged in.
+    await expect(failWithA401(OFFERS_A_CREDENTIAL)).resolves.toStrictEqual(sessionAs('admin'))
   })
 })

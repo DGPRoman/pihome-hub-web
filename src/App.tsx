@@ -1,11 +1,27 @@
+import { useState } from 'react'
+
 import styles from './App.module.css'
 import { DevicePanel } from './components/DevicePanel'
+import { JoinPage } from './components/JoinPage'
 import { LoginForm } from './components/LoginForm'
+import { PeoplePanel } from './components/PeoplePanel'
 import { RelayPanel } from './components/RelayPanel'
 import { RulePanel } from './components/RulePanel'
 import { SensorPanel } from './components/SensorPanel'
 import { SessionBar } from './components/SessionBar'
 import { useSession } from './hooks/useSession'
+import type { Landing } from './lib/join'
+import { mayManagePeople } from './lib/roles'
+
+const HOUSE: Landing = { page: 'house' }
+
+interface AppProps {
+  /**
+   * Where this page load landed, read from the address before the first render —
+   * see `readLanding`, and why it cannot be read here.
+   */
+  readonly landing?: Landing
+}
 
 /**
  * Application shell. Sections own their own data; this decides whether there is
@@ -14,9 +30,21 @@ import { useSession } from './hooks/useSession'
  * Three states, not two. "Still asking" is separate from "nobody is logged in"
  * because rendering a login form during the first probe would flash one at
  * somebody who is already logged in, on every page load.
+ *
+ * And one page beside them, for a link that carries an invitation. Two places to
+ * be is not enough to want a router: this holds which one, and the address is
+ * tidied to match when it changes.
  */
-export function App() {
+export function App({ landing = HOUSE }: AppProps) {
   const session = useSession()
+  const [page, setPage] = useState(landing)
+
+  const leaveJoinPage = () => {
+    // Replaced rather than pushed: going back should not return to a page whose
+    // only purpose was a token that is now spent.
+    window.history.replaceState(null, '', '/')
+    setPage(HOUSE)
+  }
 
   return (
     <main className={styles.layout}>
@@ -27,7 +55,12 @@ export function App() {
         )}
       </header>
 
-      {session.isPending ? (
+      {page.page === 'join' ? (
+        // Ahead of the session states, which it does not wait for: the person
+        // following a link is usually nobody yet, and the page has to say what
+        // the button does whoever they are.
+        <JoinPage token={page.token} onDone={leaveJoinPage} />
+      ) : session.isPending ? (
         <p className={styles.waiting} role="status">
           Asking the hub who you are…
         </p>
@@ -46,6 +79,7 @@ export function App() {
           <SensorPanel />
           <DevicePanel />
           <RulePanel />
+          {mayManagePeople(session.data.role) && <PeoplePanel />}
         </>
       )}
     </main>

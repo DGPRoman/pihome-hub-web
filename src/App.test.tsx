@@ -8,8 +8,9 @@ import * as relaysApi from './api/relays'
 import * as sensorsApi from './api/sensors'
 import * as sessionApi from './api/session'
 import type { Session } from './api/types'
+import * as usersApi from './api/users'
 import { App } from './App'
-import { renderWithQuery } from './testing/renderWithQuery'
+import { renderWithQuery, sessionAs } from './testing/renderWithQuery'
 
 const OPERATOR: Session = {
   username: 'roman',
@@ -112,7 +113,7 @@ describe('App', () => {
       stubTheHouse()
       vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(null)
       vi.spyOn(sessionApi, 'logIn').mockRejectedValue(
-        new HubError('unauthorized', 'Wrong username or password.', 401),
+        new HubError('unauthorized', sessionApi.LOGIN_REFUSED, 401),
       )
 
       renderWithQuery(<App />)
@@ -120,7 +121,7 @@ describe('App', () => {
       await userEvent.type(screen.getByLabelText('Password'), 'wrong')
       await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
 
-      expect(await screen.findByRole('alert')).toHaveTextContent('Wrong username or password.')
+      expect(await screen.findByRole('alert')).toHaveTextContent(sessionApi.LOGIN_REFUSED)
     })
   })
 
@@ -219,6 +220,143 @@ describe('App', () => {
       await waitFor(() => {
         expect(screen.queryByRole('region', { name: 'Relays' })).toBeNull()
       })
+    })
+  })
+
+  describe('the people section', () => {
+    it('is there for an admin', async () => {
+      stubTheHouse()
+      vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(sessionAs('admin'))
+      vi.spyOn(usersApi, 'fetchAccounts').mockResolvedValue([])
+
+      renderWithQuery(<App />)
+
+      expect(await screen.findByRole('region', { name: 'People' })).toBeInTheDocument()
+    })
+
+    it.each(['operator', 'viewer'] as const)(
+      'is not there for an %s, and the hub is not asked',
+      async (role) => {
+        stubTheHouse()
+        vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(sessionAs(role))
+        const fetchAccounts = vi.spyOn(usersApi, 'fetchAccounts').mockResolvedValue([])
+
+        renderWithQuery(<App />)
+        await screen.findByRole('region', { name: 'Relays' })
+
+        // Not shown and explained, as a switch is: nobody is made an admin from
+        // here, so there is nothing to tell them to ask for. And not asked for,
+        // since the hub would refuse and the refusal would land on screen.
+        expect(screen.queryByRole('region', { name: 'People' })).toBeNull()
+        expect(fetchAccounts).not.toHaveBeenCalled()
+      },
+    )
+  })
+
+  describe('following an invitation link', () => {
+    const OLYA: Session = { ...OPERATOR, username: 'olya' }
+
+    function land(token: string | null) {
+      return renderWithQuery(<App landing={{ page: 'join', token }} />)
+    }
+
+    it('does nothing until the button is pressed', async () => {
+      // A messaging app fetching the link for a preview must not spend it.
+      stubTheHouse()
+      vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(null)
+      const join = vi.spyOn(sessionApi, 'joinWithInvitation').mockResolvedValue(OLYA)
+
+      land('one-time')
+
+      expect(await screen.findByRole('button', { name: 'Join' })).toBeInTheDocument()
+      expect(join).not.toHaveBeenCalled()
+      expect(screen.queryByRole('button', { name: 'Log in' })).toBeNull()
+    })
+
+    it('joins with the token, and goes to the house as the invited account', async () => {
+      stubTheHouse()
+      vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(null)
+      const join = vi.spyOn(sessionApi, 'joinWithInvitation').mockResolvedValue(OLYA)
+      window.history.replaceState(null, '', '/join')
+
+      land('one-time')
+      await userEvent.click(await screen.findByRole('button', { name: 'Join' }))
+
+      expect(join).toHaveBeenCalledWith('one-time')
+      expect(await screen.findByRole('region', { name: 'Relays' })).toBeInTheDocument()
+      expect(screen.getByText('olya')).toBeInTheDocument()
+      // Replaced, not pushed: going back should not return to a spent link.
+      expect(window.location.pathname).toBe('/')
+    })
+
+    it('says to ask for a new one when the hub refuses the token, and offers no retry', async () => {
+      stubTheHouse()
+      vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(null)
+      vi.spyOn(sessionApi, 'joinWithInvitation').mockRejectedValue(
+        new HubError('unauthorized', sessionApi.INVITATION_REFUSED, 401),
+      )
+
+      land('spent')
+      await userEvent.click(await screen.findByRole('button', { name: 'Join' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Ask whoever sent it')
+      // Pressing again is another failure counted against this browser for nothing.
+      expect(screen.queryByRole('button', { name: 'Join' })).toBeNull()
+      expect(screen.getByRole('button', { name: 'Go to the hub' })).toBeInTheDocument()
+    })
+
+    it('lets them try again when the hub did not answer, since the token is still good', async () => {
+      stubTheHouse()
+      vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(null)
+      vi.spyOn(sessionApi, 'joinWithInvitation').mockRejectedValue(
+        new HubError('offline', 'The hub did not answer. Is it running?'),
+      )
+
+      land('one-time')
+      await userEvent.click(await screen.findByRole('button', { name: 'Join' }))
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('did not answer')
+      expect(screen.getByRole('button', { name: 'Join' })).toBeInTheDocument()
+    })
+
+    it('says when the address has no invitation in it', async () => {
+      stubTheHouse()
+      vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(null)
+
+      land(null)
+
+      expect(await screen.findByText(/no invitation in this address/)).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Join' })).toBeNull()
+    })
+
+    it('warns a browser that is logged in already that it will change accounts', async () => {
+      stubTheHouse()
+      vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(sessionAs('admin'))
+
+      land('one-time')
+
+      expect(await screen.findByText(/logged in as admin/)).toHaveTextContent(
+        'Joining logs it in as the invited account instead',
+      )
+    })
+
+    it('keeps the session a browser had when the token is refused', async () => {
+      // The hub leaves the cookie alone when it refuses an invitation. Taking its
+      // 401 as the session ending would show a login form to somebody who is
+      // still logged in.
+      stubTheHouse()
+      vi.spyOn(usersApi, 'fetchAccounts').mockResolvedValue([])
+      vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(sessionAs('admin'))
+      vi.spyOn(sessionApi, 'joinWithInvitation').mockRejectedValue(
+        new HubError('unauthorized', sessionApi.INVITATION_REFUSED, 401),
+      )
+
+      land('spent')
+      await userEvent.click(await screen.findByRole('button', { name: 'Join' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Go to the hub' }))
+
+      expect(await screen.findByRole('region', { name: 'Relays' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Log in' })).toBeNull()
     })
   })
 })

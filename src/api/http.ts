@@ -27,7 +27,7 @@ const TIMED_OUT = Symbol('the hub did not answer in time')
 
 /** What this app sends. Narrower than `RequestInit` so headers stay a plain object. */
 export interface HubRequestInit {
-  readonly method: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  readonly method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
   readonly headers?: Record<string, string>
   readonly body?: string
 }
@@ -185,6 +185,14 @@ function errorForResponse(response: Response): HubError {
       )
     case 404:
       return new HubError('not-found', 'The hub has no record of that.', status)
+    case 409:
+      // Generic on purpose: only the caller knows what the something is, so each
+      // request that can meet this says it in its own words.
+      return new HubError(
+        'conflict',
+        'The hub refused that because of something already there.',
+        status,
+      )
     case 422:
       // The hub validates bodies strictly and guesses at nothing, so this means
       // the client sent a shape it does not accept — a bug here, not something

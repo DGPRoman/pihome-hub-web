@@ -5,13 +5,15 @@ plane for a Raspberry Pi wired to relay-switched circuits.
 
 The hub speaks a small REST API. This is the browser client for it: a page that switches the
 relays, shows what the sensors last reported, says whether the hub can still reach the devices
-it polls, and lists the rules wiring them together — without reaching for `curl`.
+it polls, and lists the rules wiring them together — without reaching for `curl`. For an admin
+it is also where people are added: a name and a role, then a QR code and a link that log their
+phone in once, with no password to choose or pass on.
 
 > **Status: early.** Relays, sensors, automation rules and devices all read, with polling,
 > optimistic writes and honest failure states. The bundle is served by the hub itself and the
-> browser logs in for itself, so a role now restricts this client and not just a session. What
-> is missing is administration: the hub serves no route for creating an account or declaring a
-> device, so neither can be done from here — see [Roadmap](#roadmap).
+> browser logs in for itself, so a role restricts this client and not just a session. An admin
+> manages `operator` and `viewer` accounts from here and invites people to them. Admin accounts
+> and devices stay declared on the hub, on purpose — see [Roadmap](#roadmap).
 
 ## Design notes
 
@@ -128,6 +130,36 @@ browser" would rest on a naming convention if there were a credential to name �
 builds with a canary value and fails if it finds it in `dist/`, which now guards against the
 mechanism coming back rather than against the one that was there.
 
+**An invitation is a link, and opening it does nothing.** An admin adds somebody with a name and
+a role, and the hub returns a one-time token, valid for fifteen minutes, that this page shows
+as a QR code and a link — both, because a laptop has no camera and a phone standing beside the
+screen should not need a link sent to it. The token goes after `#` in `/join#…`, which a
+browser never sends to a server, so it reaches no access log, no proxy and no `Referer`. The
+page that link opens takes it straight back out of the address bar and this tab's history
+entry, and redeems it only when the button is pressed: messaging apps fetch every link they
+are sent to draw a preview, and a page that redeemed on load would have the token spent by
+that fetch before its person ever saw it. The code is drawn in the browser from the link, so
+the token is never an image anything could cache.
+
+While it is on screen the token is held in one place — the people section's state — and not in
+the query cache, where every component could read it. The request that fetched it is
+collected the moment it is reset, since a finished mutation otherwise keeps its answer for
+minutes. Closing the card is the whole of letting it go. The card counts down, and says so
+when the hub stops listing the invitation, which is what happens when somebody uses it.
+
+Admin accounts are not invited, changed or deleted from here, and the form never offers the
+role: the hub grants it on its console and nowhere else. The people section itself is the one
+control this client hides rather than explains. Nobody becomes an admin from here, so there is
+nothing a `viewer` could ask for that would change it, and a section explaining that would be
+noise — and since the section is not rendered, the hub is not asked for a list it would only
+refuse.
+
+**A refused login is not a session ending.** A `401` from anything means the session this
+browser held has stopped working, and the cache records that nobody is logged in. Except from
+a login: a wrong password or a spent invitation is the hub refusing what was offered, and it
+leaves the cookie alone when it does. Those two mutations say so in their `meta`, so following
+an expired link while logged in leaves you logged in.
+
 A write authenticated by that cookie carries an `X-Pihome-CSRF` header. Any value: the hub
 never reads it, and its presence is the whole check, because a page on another origin cannot
 set a header like that without a CORS preflight the hub will not answer. `SameSite=Strict` on
@@ -152,10 +184,13 @@ To see real relay and sensor state, start the hub first (see its own quick start
 yourself an account on it:
 
 ```bash
-pihome-hub-admin create roman --role operator   # prompts for the password, twice
+pihome-hub-admin create roman --role admin   # prompts for the password, twice
 ```
 
-Then log in on the page. `npm run dev` proxies `/v1` and `/health` to
+Then log in on the page. As an admin you also get the people section, which is how everybody
+else gets in: add a name, and open the link it shows in a private window to see what joining
+looks like. A link made on `localhost` opens only the device it was made on — the card says
+so — so to invite a phone, open the page by the hub's address on your network. `npm run dev` proxies `/v1` and `/health` to
 `http://127.0.0.1:5002` and adds nothing on the way out, so requests stay same-origin —
 which is what lets the session cookie work here exactly as it will anywhere else, and why
 the app needs no CORS-shaped special case that would exist only in development. Point it at
@@ -168,10 +203,10 @@ the hub that way could switch a mains circuit it would otherwise have refused th
 development mode that grants more than production hides exactly the bugs this client exists
 to avoid.
 
-The role you give yourself is worth choosing on purpose. An `operator` can switch relays; a
-`viewer` is shown the same house with the same switches, each marked unavailable and saying
-why — which is a useful thing to look at once, because it is what somebody given the wrong
-role will see and it should tell them what to ask for.
+The other roles are worth looking at once, and an invitation is the quick way to be one. An
+`operator` can switch relays; a `viewer` is shown the same house with the same switches, each
+marked unavailable and saying why — which is what somebody given the wrong role will see, and
+it should tell them what to ask for.
 
 Logging out, or letting the session expire, should return the page to the login form rather
 than leaving a stale house on screen.
@@ -295,7 +330,9 @@ src/
 │   ├── relays.ts               GET and PUT, one relay or all, with runtime validation
 │   ├── sensors.ts              GET, with runtime validation and wire mapping
 │   ├── devices.ts              GET, the devices the hub polls
-│   └── automation.ts           GET, the configured rules
+│   ├── automation.ts           GET, the configured rules
+│   ├── session.ts              log in by password or invitation, and out
+│   └── users.ts                accounts and their invitations, for an admin
 ├── hooks/
 │   ├── queryKeys.ts            cache keys, shared by query and mutation
 │   ├── useMayChangeTheHouse.ts the role, as the one question the UI asks of it
@@ -304,7 +341,10 @@ src/
 │   ├── useSetAllRelays.ts      the same, for every relay at once
 │   ├── useSensors.ts           the sensor read
 │   ├── useDevices.ts           the device read
-│   └── useRules.ts             the automation read
+│   ├── useRules.ts             the automation read
+│   ├── useSession.ts           who this browser is, and the ways in and out
+│   ├── useAccounts.ts          the account list and every write to it
+│   └── useNow.ts               a clock for a countdown, and nothing else
 ├── components/
 │   ├── DataPanel.tsx           loading, failure, stale and empty, once for all sections
 │   ├── ErrorBoundary.tsx       contains a rendering crash to one section
@@ -320,15 +360,25 @@ src/
 │   ├── DeviceRow.tsx           one device: where it is, and what it last said
 │   ├── RulePanel.tsx           the automation section
 │   ├── RuleList.tsx            the rule list
-│   └── RuleRow.tsx             one rule, in a sentence
+│   ├── RuleRow.tsx             one rule, in a sentence
+│   ├── PeoplePanel.tsx         the people section, for an admin
+│   ├── PersonRow.tsx           one account, and what may be done to it from here
+│   ├── AddPersonForm.tsx       a name and a role, then straight to the invitation
+│   ├── InvitationCard.tsx      the code, the link and the time left on them
+│   ├── QrCode.tsx              a QR code, drawn in the browser
+│   └── JoinPage.tsx            where an invitation link lands
 ├── lib/
 │   ├── roles.ts                what each role may do, ranked as the hub ranks it
 │   ├── freshness.ts            how far a single sensor reading can be trusted
 │   ├── devices.ts              where a device stands with the hub, in four answers
-│   └── time.ts                 relative times, as a pure function of two instants
+│   ├── join.ts                 the join link, and reading one out of the address
+│   ├── qr.ts                   a link as a QR matrix, as one SVG path
+│   ├── usernames.ts            the hub's rule for a name, mirrored for the form
+│   └── time.ts                 relative times and countdowns, as pure functions
 ├── styles/
 │   ├── global.css              design tokens and element defaults
-│   └── list.module.css         the row container every section shares
+│   ├── list.module.css         the row container every section shares
+│   └── button.module.css       the secondary button every section uses
 └── testing/
     └── renderWithQuery.tsx     render helper providing a fresh cache
 index.html                      the page Vite serves and builds
@@ -345,16 +395,16 @@ styles are genuinely shared.
 
 ## Roadmap
 
-| Phase | Scope                                                            | Status      |
-| ----- | ---------------------------------------------------------------- | ----------- |
-| 1     | Vite build, strict TypeScript, Vitest and Testing Library        | ✅ done     |
-| 2     | Typed API client, relay list, loading and failure states         | ✅ done     |
-| 3     | ESLint, Prettier and CI                                          | ✅ done     |
-| 4     | Relay switching, optimistic writes, polling                      | ✅ done     |
-| 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done     |
-| 6     | Automation rules, read-only                                      | ✅ done     |
-| 7     | Getting this served somewhere, and authenticating a real browser | ✅ done     |
-| 8     | Users, roles and devices                                         | in progress |
+| Phase | Scope                                                            | Status  |
+| ----- | ---------------------------------------------------------------- | ------- |
+| 1     | Vite build, strict TypeScript, Vitest and Testing Library        | ✅ done |
+| 2     | Typed API client, relay list, loading and failure states         | ✅ done |
+| 3     | ESLint, Prettier and CI                                          | ✅ done |
+| 4     | Relay switching, optimistic writes, polling                      | ✅ done |
+| 5     | Sensor readings, staleness, wire-format mapping                  | ✅ done |
+| 6     | Automation rules, read-only                                      | ✅ done |
+| 7     | Getting this served somewhere, and authenticating a real browser | ✅ done |
+| 8     | Users, roles and devices                                         | ✅ done |
 
 Sensors moved ahead of authentication because authentication turned out to have nothing to
 build against. Both halves of Phase 7 have since arrived: the hub issues sessions — `POST
@@ -375,12 +425,17 @@ that reading across a failed poll on purpose, and showing it with its age rather
 it is the same principle as the sensor panel's: absent, stale and zero are three different
 things.
 
-What is left of Phase 8 waits on the hub, for a plain reason: **there is no API for it.**
-Accounts exist only through `pihome-hub-admin` at a terminal on the Pi — the hub serves no
-`/v1/users`, so creating an account, changing a role or disabling one cannot be built here at
-all. Declaring a device is the same shape: which devices exist is a file the hub reads, and
-`/v1/devices` only reads it back. Both need hub routes before there is anything to write a
-client against, which is the same reason phases 7 and 8 waited before.
+People came last, once the hub had routes for them. An admin lists every account, moves one
+between `operator` and `viewer`, disables, re-enables and deletes it, and adds somebody by
+invitation — the hub makes an account with no password anybody holds, and the link is the way
+in. A new phone, or a session that ran out, is another invitation to the same account.
+
+Two things are left out on purpose rather than waiting on anything. **Admin accounts** are
+the hub console's: no route raises an account to `admin` or changes one, so this client offers
+neither. **Devices** are declared in a file on the hub, and `/v1/devices` only reads it back —
+declaring rather than discovering is what stops an announcement aiming the hub at an address
+nobody chose, so administering devices from here would be changing that rule, not adding a
+feature.
 
 ## License
 

@@ -22,6 +22,10 @@ export const ruleKeys = {
   all: ['automation-rules'] as const,
 }
 
+export const userKeys = {
+  all: ['users'] as const,
+}
+
 export const sessionKeys = {
   current: ['session'] as const,
 }

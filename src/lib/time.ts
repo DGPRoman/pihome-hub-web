@@ -33,3 +33,33 @@ export function formatRelativeTime(from: Date, now: Date): string {
   }
   return relative.format(-Math.round(elapsedMs / DAY_MS), 'day')
 }
+
+// Built once, like the relative formatter above.
+const clock = new Intl.DateTimeFormat(undefined, { timeStyle: 'short' })
+const minutes = new Intl.NumberFormat(undefined, {
+  style: 'unit',
+  unit: 'minute',
+  unitDisplay: 'long',
+})
+
+/** A time of day, the way the reader's locale writes one. */
+export function formatClockTime(moment: Date): string {
+  return clock.format(moment)
+}
+
+/**
+ * How long is left before `until`, in words — or `null` once it has passed.
+ *
+ * Rounded up, so it never says "0 minutes" about something that still works, and
+ * "less than a minute" for the last one, which is when the difference matters.
+ */
+export function formatTimeLeft(until: Date, now: Date): string | null {
+  const leftMs = until.getTime() - now.getTime()
+  if (leftMs <= 0) {
+    return null
+  }
+  if (leftMs < MINUTE_MS) {
+    return 'less than a minute'
+  }
+  return minutes.format(Math.ceil(leftMs / MINUTE_MS))
+}

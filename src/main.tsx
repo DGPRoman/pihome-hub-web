@@ -3,6 +3,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import { App } from './App'
+import { readLanding } from './lib/join'
 import { createQueryClient } from './queryClient'
 import './styles/global.css'
 
@@ -18,10 +19,15 @@ if (!container) {
 // replaced on every render, discarding the cache it exists to hold.
 const queryClient = createQueryClient()
 
+// Read here, once, before React renders anything. It takes an invitation's token
+// out of the address as it reads it, so a second read — which StrictMode makes in
+// development — would find nothing.
+const landing = readLanding(window.location, window.history)
+
 createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <App landing={landing} />
     </QueryClientProvider>
   </StrictMode>,
 )

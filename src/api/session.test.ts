@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { HubError } from './errors'
-import { fetchSession, logIn, logOut, parseSession } from './session'
+import {
+  fetchSession,
+  INVITATION_REFUSED,
+  joinWithInvitation,
+  LOGIN_REFUSED,
+  logIn,
+  logOut,
+  parseSession,
+} from './session'
 
 const BODY = { username: 'roman', role: 'operator', expires_at: '2026-10-21T08:00:00Z' }
 
@@ -142,12 +150,68 @@ describe('logIn', () => {
     await expect(rejectionKind(logIn('roman', 'wrong'))).resolves.toBe('unauthorized')
   })
 
+  it('says the username and password were refused, not a key', async () => {
+    // The shared 401 message is about a key, which this client has not held since
+    // it moved to sessions — and the login form showed it for a mistyped password.
+    stubFetch(jsonResponse({ detail: 'Invalid username or password' }, 401))
+
+    await expect(logIn('roman', 'wrong')).rejects.toMatchObject({
+      kind: 'unauthorized',
+      message: LOGIN_REFUSED,
+      status: 401,
+    })
+  })
+
   it('reports being rate limited distinguishably', async () => {
     // The hub counts login failures in their own bucket. Somebody who has hit it
     // needs to be told to wait, not told their password is wrong again.
     stubFetch(jsonResponse({ detail: 'Too many failed attempts' }, 429))
 
     await expect(rejectionKind(logIn('roman', 'wrong'))).resolves.toBe('rate-limited')
+  })
+})
+
+describe('joinWithInvitation', () => {
+  it('presents the token at the login route, and nothing else', async () => {
+    const fetchMock = stubFetch(jsonResponse(BODY, 201))
+
+    const session = await joinWithInvitation('one-time-token')
+
+    expect(fetchMock).toHaveBeenCalledWith('/v1/session', expect.anything())
+    const init = fetchMock.mock.calls[0]?.[1]
+    expect(init?.method).toBe('POST')
+    expect(init?.body).toBe(JSON.stringify({ invitation: 'one-time-token' }))
+    expect(session.username).toBe('roman')
+  })
+
+  it('carries the CSRF header, which the hub insists on here', async () => {
+    // Without it the hub refuses before looking at the token. Another page could
+    // otherwise put this browser into an account of its choosing.
+    const fetchMock = stubFetch(jsonResponse(BODY, 201))
+
+    await joinWithInvitation('one-time-token')
+
+    const headers = fetchMock.mock.calls[0]?.[1]?.headers as Record<string, string>
+    expect(headers['X-Pihome-CSRF']).toBeDefined()
+  })
+
+  it.each([
+    ['refused', 401, 'unauthorized'],
+    ['too long to be one the hub issued', 422, 'malformed'],
+  ])('says to ask for a new one when the token is %s', async (_name, status, kind) => {
+    stubFetch(jsonResponse({ detail: 'The invitation is not valid' }, status))
+
+    await expect(joinWithInvitation('spent')).rejects.toMatchObject({
+      kind,
+      message: INVITATION_REFUSED,
+      status,
+    })
+  })
+
+  it('leaves a hub that is not answering as that, since the token is still good', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(rejectionKind(joinWithInvitation('one-time-token'))).resolves.toBe('offline')
   })
 })
 

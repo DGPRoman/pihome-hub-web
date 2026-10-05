@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { formatRelativeTime } from './time'
+import { formatClockTime, formatRelativeTime, formatTimeLeft } from './time'
 
 const NOW = new Date('2026-08-11T12:00:00Z')
 
@@ -30,5 +30,33 @@ describe('formatRelativeTime', () => {
     const future = new Date(NOW.getTime() + 4_000)
 
     expect(formatRelativeTime(future, NOW)).toBe('now')
+  })
+})
+
+describe('formatTimeLeft', () => {
+  function inMs(ms: number): Date {
+    return new Date(NOW.getTime() + ms)
+  }
+
+  it.each([
+    ['the whole fifteen minutes', inMs(15 * 60_000), '15 minutes'],
+    ['a part minute, rounded up', inMs(14 * 60_000 + 1), '15 minutes'],
+    ['one minute', inMs(60_000), '1 minute'],
+    ['the last minute', inMs(59_999), 'less than a minute'],
+    ['the last second', inMs(1), 'less than a minute'],
+  ])('describes %s', (_label, until, expected) => {
+    expect(formatTimeLeft(until, NOW)).toBe(expected)
+  })
+
+  it('says nothing is left once it has passed, rather than "0 minutes"', () => {
+    expect(formatTimeLeft(NOW, NOW)).toBeNull()
+    expect(formatTimeLeft(inMs(-1), NOW)).toBeNull()
+  })
+})
+
+describe('formatClockTime', () => {
+  it('writes a time of day without the date', () => {
+    expect(formatClockTime(NOW)).toMatch(/\d{1,2}[:.]\d{2}/)
+    expect(formatClockTime(NOW)).not.toMatch(/2026/)
   })
 })

@@ -151,3 +151,40 @@ export interface Session {
   /** When the hub will stop accepting this session, whatever the browser does. */
   readonly expiresAt: Date
 }
+
+/**
+ * A role the hub hands out over HTTP.
+ *
+ * `admin` is not one. It is granted on the hub's console and nowhere else, so an
+ * account can be made, invited, moved and disabled from here only if it is one of
+ * these — and the type is what keeps a form from offering the third.
+ */
+export type ManagedRole = Exclude<Role, 'admin'>
+
+/**
+ * An account, as an admin sees it. Mirrors `UserResponse` in the hub's v1 schema.
+ *
+ * No password and no hash: the hub's model never held one, so there is nothing here
+ * that could leak one.
+ */
+export interface Account {
+  readonly username: string
+  readonly role: Role
+  readonly disabled: boolean
+  readonly createdAt: Date
+  /** When its outstanding invitation stops working, or `null` if it has none. */
+  readonly invitationExpiresAt: Date | null
+}
+
+/**
+ * A one-time way into an account, as the hub issued it.
+ *
+ * The one credential this client ever holds in script. It has to be: an admin is
+ * shown it so it can be passed on. It is kept by the section that shows it and
+ * nowhere else — not in the query cache, not in storage, not in this page's address
+ * — and dropped when the admin closes it.
+ */
+export interface Invitation {
+  readonly token: string
+  readonly expiresAt: Date
+}
