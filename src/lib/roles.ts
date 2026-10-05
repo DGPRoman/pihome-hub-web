@@ -1,4 +1,4 @@
-import type { Role } from '../api/types'
+import type { ManagedRole, Role } from '../api/types'
 
 /**
  * Roles in the order of what they may do.
@@ -38,3 +38,31 @@ export function mayChangeTheHouse(role: Role): boolean {
  */
 export const CANNOT_CHANGE_THE_HOUSE =
   'Your account may read the house but not change it. An admin can raise it to operator.'
+
+/**
+ * Whether this role may see and manage the people who use the hub.
+ *
+ * Unlike switching a circuit, not something to show and explain to anybody else.
+ * Nobody is raised to `admin` from here — it is granted on the hub's console — so
+ * there is no request a `viewer` could make of an admin that would change what this
+ * says, and a section explaining that to them would be noise.
+ */
+export function mayManagePeople(role: Role): boolean {
+  return RANK[role] >= RANK.admin
+}
+
+/**
+ * Whether an account with this role can be changed from here.
+ *
+ * Every account but an admin's. The hub refuses the rest, and this decides only
+ * that the controls are not offered for them.
+ */
+export function isManagedRole(role: Role): role is ManagedRole {
+  return role !== 'admin'
+}
+
+/** The roles an admin can hand out from here, least first, as a form lists them. */
+export const MANAGED_ROLES: readonly ManagedRole[] = ['viewer', 'operator']
+
+/** Why an admin account has no controls, said once and the same way everywhere. */
+export const MANAGED_ON_THE_CONSOLE = "Admin accounts are managed on the hub's console."

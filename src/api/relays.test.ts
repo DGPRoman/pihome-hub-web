@@ -94,6 +94,7 @@ describe('fetchRelays', () => {
   it.each([
     [401, 'unauthorized'],
     [404, 'not-found'],
+    [409, 'conflict'],
     [422, 'malformed'],
     [429, 'rate-limited'],
     [500, 'server'],
@@ -165,7 +166,7 @@ describe('fetchRelays', () => {
   })
 
   describe.each([
-    [409, 'malformed', 'refused'],
+    [410, 'malformed', 'refused'],
     [418, 'malformed', 'refused'],
     [500, 'server', 'failed'],
     [507, 'server', 'failed'],

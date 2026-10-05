@@ -15,8 +15,22 @@ import { sessionKeys } from './hooks/queryKeys'
 declare module '@tanstack/react-query' {
   interface Register {
     defaultError: HubError
+    mutationMeta: {
+      /**
+       * This mutation offers the hub a credential instead of using the one this
+       * browser holds: a password, or an invitation.
+       *
+       * A `401` from it is the hub refusing what was offered. It says nothing about
+       * the session already here — the hub leaves the cookie alone when it refuses
+       * — so it must not be taken as that session ending. See `forgetTheSession`.
+       */
+      readonly offersACredential?: boolean
+    }
   }
 }
+
+/** The `meta` for a mutation that logs in, by whichever means. */
+export const OFFERS_A_CREDENTIAL = { offersACredential: true } as const
 
 /** How long a relay read is treated as fresh enough to reuse without refetching. */
 export const STALE_TIME_MS = 2_000
@@ -56,6 +70,9 @@ const RETRYABLE: Readonly<Record<HubErrorKind, boolean>> = {
   // The account is not allowed. It will not become allowed by asking again, and
   // each attempt is another failure the hub's limiter counts against this client.
   forbidden: false,
+  // A name that is taken or an account that is disabled stays that way until
+  // somebody changes it, and the person who can is reading the message.
+  conflict: false,
   // The hub answered and the answer was unusable. A second read may well succeed,
   // but on a write this kind means the write already happened, and the retry
   // would be a second one — so no.
@@ -81,6 +98,11 @@ export function createQueryClient(): QueryClient {
    * truth, the shell already knows what to render for it, and the login form is
    * the only thing that helps. The session query itself cannot reach here — it
    * answers null for a 401 instead of rejecting.
+   *
+   * Nor can a login. A refused password or invitation is a 401 about what was
+   * offered, and the session this browser may already hold is untouched by it —
+   * forgetting that one would send somebody who followed an expired link to a
+   * login form they did not need. Those mutations say so in their `meta`.
    */
   const forgetTheSession = (error: HubError): void => {
     if (error.kind === 'unauthorized') {
@@ -90,7 +112,13 @@ export function createQueryClient(): QueryClient {
 
   const client = new QueryClient({
     queryCache: new QueryCache({ onError: forgetTheSession }),
-    mutationCache: new MutationCache({ onError: forgetTheSession }),
+    mutationCache: new MutationCache({
+      onError: (error, _variables, _context, mutation) => {
+        if (mutation.meta?.offersACredential !== true) {
+          forgetTheSession(error)
+        }
+      },
+    }),
     defaultOptions: {
       queries: {
         staleTime: STALE_TIME_MS,

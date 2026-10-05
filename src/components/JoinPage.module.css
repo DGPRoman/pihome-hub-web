@@ -1,0 +1,30 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background-color: var(--color-surface-raised);
+}
+
+.heading {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.text,
+.note,
+.error {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.note {
+  color: var(--color-text-muted);
+}
+
+.error {
+  color: var(--color-danger);
+}

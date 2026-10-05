@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest'
 
 import type { Role } from '../api/types'
 
-import { CANNOT_CHANGE_THE_HOUSE, mayChangeTheHouse } from './roles'
+import {
+  CANNOT_CHANGE_THE_HOUSE,
+  isManagedRole,
+  MANAGED_ON_THE_CONSOLE,
+  MANAGED_ROLES,
+  mayChangeTheHouse,
+  mayManagePeople,
+} from './roles'
 
 describe('mayChangeTheHouse', () => {
   /**
@@ -43,5 +50,40 @@ describe('the reason a control is unavailable', () => {
 
   it('does not blame the reader or the app', () => {
     expect(CANNOT_CHANGE_THE_HOUSE).not.toMatch(/error|failed|denied/i)
+  })
+})
+
+describe('mayManagePeople', () => {
+  /** Every role, as above: a new one fails the build until it is decided here. */
+  const EXPECTED: Readonly<Record<Role, boolean>> = {
+    viewer: false,
+    operator: false,
+    admin: true,
+  }
+
+  it.each(Object.entries(EXPECTED))('a %s may manage people: %s', (role, expected) => {
+    expect(mayManagePeople(role as Role)).toBe(expected)
+  })
+})
+
+describe('which accounts can be changed from here', () => {
+  const EXPECTED: Readonly<Record<Role, boolean>> = {
+    viewer: true,
+    operator: true,
+    // Granted on the hub's console, and only changed there.
+    admin: false,
+  }
+
+  it.each(Object.entries(EXPECTED))('a %s account: %s', (role, expected) => {
+    expect(isManagedRole(role as Role)).toBe(expected)
+  })
+
+  it('offers exactly those roles to hand out, least first', () => {
+    expect(MANAGED_ROLES).toStrictEqual(['viewer', 'operator'])
+    expect(MANAGED_ROLES.every(isManagedRole)).toBe(true)
+  })
+
+  it('says where an admin account is changed instead', () => {
+    expect(MANAGED_ON_THE_CONSOLE).toMatch(/console/)
   })
 })

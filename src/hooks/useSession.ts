@@ -1,8 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query'
 
 import type { HubError } from '../api/errors'
-import { fetchSession, logIn, logOut } from '../api/session'
+import { fetchSession, joinWithInvitation, logIn, logOut } from '../api/session'
 import type { Session } from '../api/types'
+import { OFFERS_A_CREDENTIAL } from '../queryClient'
 import { sessionKeys } from './queryKeys'
 
 /**
@@ -39,24 +40,48 @@ export interface Credentials {
   readonly password: string
 }
 
+/** What either way in does once the hub has said yes. */
+function startSession(queryClient: QueryClient, session: Session): void {
+  // Written rather than invalidated: the hub has just answered this exact
+  // question and a second round trip would leave the shell on the login form
+  // for as long as it took.
+  queryClient.setQueryData(sessionKeys.current, session)
+  // Everything else was fetched, or refused, as somebody else — including as
+  // nobody. None of it is this account's view of the house.
+  //
+  // Everything *else*: invalidating the session too would immediately refetch
+  // the answer just written, which is the round trip the line above exists to
+  // avoid.
+  void queryClient.invalidateQueries({ predicate: isNotTheSession })
+}
+
 /** Log in, and put the resulting session straight into the cache. */
 export function useLogIn() {
   const queryClient = useQueryClient()
 
   return useMutation<Session, HubError, Credentials>({
     mutationFn: ({ username, password }) => logIn(username, password),
+    meta: OFFERS_A_CREDENTIAL,
     onSuccess: (session) => {
-      // Written rather than invalidated: the hub has just answered this exact
-      // question and a second round trip would leave the shell on the login form
-      // for as long as it took.
-      queryClient.setQueryData(sessionKeys.current, session)
-      // Everything else was fetched, or refused, as somebody else — including as
-      // nobody. None of it is this account's view of the house.
-      //
-      // Everything *else*: invalidating the session too would immediately refetch
-      // the answer just written, which is the round trip the line above exists to
-      // avoid.
-      void queryClient.invalidateQueries({ predicate: isNotTheSession })
+      startSession(queryClient, session)
+    },
+  })
+}
+
+/**
+ * Join an account with the token an invitation carried.
+ *
+ * The same ending as a password login, and the same exemption: a refused token says
+ * nothing about a session this browser may already hold, so that session stays.
+ */
+export function useJoin() {
+  const queryClient = useQueryClient()
+
+  return useMutation<Session, HubError, string>({
+    mutationFn: (token) => joinWithInvitation(token),
+    meta: OFFERS_A_CREDENTIAL,
+    onSuccess: (session) => {
+      startSession(queryClient, session)
     },
   })
 }
