@@ -29,3 +29,7 @@ export const userKeys = {
 export const sessionKeys = {
   current: ['session'] as const,
 }
+
+export const androidAppKeys = {
+  current: ['android-app'] as const,
+}

@@ -2,7 +2,7 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv, type ProxyOptions } from 'vite'
 
-const HUB_PATHS = ['/v1', '/health']
+const HUB_PATHS = ['/v1', '/health', '/app/']
 const DEFAULT_HUB_ORIGIN = 'http://127.0.0.1:5002'
 
 export default defineConfig(({ mode }) => {
