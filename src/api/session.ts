@@ -5,6 +5,17 @@ import type { Session } from './types'
 const SESSION_PATH = '/v1/session'
 
 /**
+ * What a refused login says.
+ *
+ * Not the shared message for a 401, which is written for every other route — where
+ * it means the credential this browser already held stopped working. Here nothing
+ * was held yet: the hub was offered a username and a password and did not take
+ * them. It says nothing more specific on purpose, answering no such account, a
+ * wrong password and a disabled account alike, so neither does this.
+ */
+export const LOGIN_REFUSED = 'The hub did not accept that username and password.'
+
+/**
  * Who this browser is logged in as, or `null`.
  *
  * `null` rather than a rejection for "not logged in". Being logged out is the
@@ -43,16 +54,23 @@ export async function logIn(
   signal: AbortSignal | null = null,
 ): Promise<Session> {
   return onlyHubErrors(async () => {
-    const response = await hubRequest(
-      SESSION_PATH,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      },
-      signal,
-    )
-    return parseSession(await readJson(response))
+    try {
+      const response = await hubRequest(
+        SESSION_PATH,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        },
+        signal,
+      )
+      return parseSession(await readJson(response))
+    } catch (cause) {
+      if (cause instanceof HubError && cause.kind === 'unauthorized') {
+        throw new HubError('unauthorized', LOGIN_REFUSED, cause.status)
+      }
+      throw cause
+    }
   })
 }
 

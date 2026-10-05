@@ -112,7 +112,7 @@ describe('App', () => {
       stubTheHouse()
       vi.spyOn(sessionApi, 'fetchSession').mockResolvedValue(null)
       vi.spyOn(sessionApi, 'logIn').mockRejectedValue(
-        new HubError('unauthorized', 'Wrong username or password.', 401),
+        new HubError('unauthorized', sessionApi.LOGIN_REFUSED, 401),
       )
 
       renderWithQuery(<App />)
@@ -120,7 +120,7 @@ describe('App', () => {
       await userEvent.type(screen.getByLabelText('Password'), 'wrong')
       await userEvent.click(screen.getByRole('button', { name: 'Log in' }))
 
-      expect(await screen.findByRole('alert')).toHaveTextContent('Wrong username or password.')
+      expect(await screen.findByRole('alert')).toHaveTextContent(sessionApi.LOGIN_REFUSED)
     })
   })
 

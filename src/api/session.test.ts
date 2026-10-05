@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { HubError } from './errors'
-import { fetchSession, logIn, logOut, parseSession } from './session'
+import { fetchSession, LOGIN_REFUSED, logIn, logOut, parseSession } from './session'
 
 const BODY = { username: 'roman', role: 'operator', expires_at: '2026-10-21T08:00:00Z' }
 
@@ -140,6 +140,18 @@ describe('logIn', () => {
     stubFetch(jsonResponse({ detail: 'Wrong username or password' }, 401))
 
     await expect(rejectionKind(logIn('roman', 'wrong'))).resolves.toBe('unauthorized')
+  })
+
+  it('says the username and password were refused, not a key', async () => {
+    // The shared 401 message is about a key, which this client has not held since
+    // it moved to sessions — and the login form showed it for a mistyped password.
+    stubFetch(jsonResponse({ detail: 'Invalid username or password' }, 401))
+
+    await expect(logIn('roman', 'wrong')).rejects.toMatchObject({
+      kind: 'unauthorized',
+      message: LOGIN_REFUSED,
+      status: 401,
+    })
   })
 
   it('reports being rate limited distinguishably', async () => {
