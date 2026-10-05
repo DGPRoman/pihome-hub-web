@@ -1,5 +1,6 @@
 /** @vitest-environment-options {"url": "http://hub.local:5002/"} */
-import { screen, waitFor, within } from '@testing-library/react'
+import type { QueryClient } from '@tanstack/react-query'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -96,6 +97,29 @@ const HOUSEHOLD = [
   account('roman', 'admin'),
   account('taras', 'viewer'),
 ]
+
+/**
+ * Read the list again, as the poll would, and strictly later than anything before.
+ *
+ * The panel judges a read by when it arrived, and the clock counts milliseconds: a
+ * stubbed request can arrive in the same one as the invitation it follows, and
+ * then says nothing about it. Waiting for the clock to move makes the read one that
+ * counts, rather than one that counts on a slow enough machine.
+ */
+async function readTheListAgain(queryClient: QueryClient): Promise<void> {
+  const before = Date.now()
+  await vi.waitFor(() => {
+    expect(Date.now()).toBeGreaterThan(before)
+  })
+  // Inside act, and a task past the read, so what it changes is on screen before
+  // anything asserts on it. TanStack tells React about new data from a timer, not
+  // when the read settles, so an assertion that the card still says one thing would
+  // otherwise run before the render that makes it say another.
+  await act(async () => {
+    await queryClient.invalidateQueries({ queryKey: userKeys.all })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
+}
 
 function renderPanel() {
   return renderWithQuery(<PeoplePanel />, { session: sessionAs('admin') })
@@ -383,11 +407,31 @@ describe('PeoplePanel', () => {
       const card = await screen.findByRole('region', { name: 'Invitation for olya' })
       hub.redeem('olya')
       // The poll, which this test's client does not run on a timer.
-      await queryClient.invalidateQueries({ queryKey: userKeys.all })
+      await readTheListAgain(queryClient)
 
       expect(await within(card).findByText(/has been used/)).toBeInTheDocument()
       expect(within(card).queryByRole('img', { name: /QR code/ })).toBeNull()
       expect(within(card).queryByLabelText('Link')).toBeNull()
+    })
+
+    it('still says it was used once it would have run out as well', async () => {
+      const hub = fakeHub(HOUSEHOLD)
+      const shortLived = Date.now() + 300
+      hub.api.issueInvitation.mockImplementationOnce(() => {
+        hub.redeem('olya')
+        return Promise.resolve({ token: 'short-lived', expiresAt: new Date(shortLived) })
+      })
+      const { queryClient } = renderPanel()
+
+      await userEvent.click(within(await rowFor('olya')).getByRole('button', { name: 'Invite' }))
+      const card = await screen.findByRole('region', { name: 'Invitation for olya' })
+      await readTheListAgain(queryClient)
+      expect(await within(card).findByText(/has been used/)).toBeInTheDocument()
+
+      await new Promise((resolve) => setTimeout(resolve, shortLived - Date.now() + 50))
+      await readTheListAgain(queryClient)
+
+      expect(card).toHaveTextContent(/has been used/)
     })
 
     it('says when it has run out, and offers a new one', async () => {
@@ -397,11 +441,15 @@ describe('PeoplePanel', () => {
         expiresAt: new Date(Date.now() - 1),
       })
 
-      renderPanel()
+      const { queryClient } = renderPanel()
       await userEvent.click(within(await rowFor('olya')).getByRole('button', { name: 'Invite' }))
       const card = await screen.findByRole('region', { name: 'Invitation for olya' })
+      // The hub leaves an invitation that has run out off the list, as it does one
+      // that was used. A read now must not turn one into the other.
+      await readTheListAgain(queryClient)
 
       expect(card).toHaveTextContent(/ran out/)
+      expect(card).not.toHaveTextContent(/has been used/)
       expect(within(card).queryByRole('img', { name: /QR code/ })).toBeNull()
       await userEvent.click(within(card).getByRole('button', { name: 'New invitation' }))
       expect(hub.api.issueInvitation).toHaveBeenCalledTimes(2)

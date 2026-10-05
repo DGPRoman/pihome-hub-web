@@ -15,11 +15,15 @@ import { PersonRow } from './PersonRow'
 interface Shown {
   readonly username: string
   readonly invitation: Invitation
-  /**
-   * When the hub confirmed it. A list read after this that no longer has it means
-   * it stopped working; one read before says nothing either way.
-   */
+  /** When the hub confirmed it, by this browser's clock. */
   readonly issuedAt: number
+  /**
+   * The hub stopped listing it before it ran out: it was used, or withdrawn or
+   * replaced somewhere else. Kept once seen, because the hub stops listing an
+   * invitation that has run out too, and the read after that would otherwise
+   * turn "used" into "ran out".
+   */
+  readonly gone: boolean
 }
 
 /**
@@ -41,10 +45,17 @@ export function PeoplePanel() {
   const invite = (username: string) => {
     issue.mutate(username, {
       onSuccess: (invitation) => {
-        setShown({ username, invitation, issuedAt: Date.now() })
+        setShown({ username, invitation, issuedAt: Date.now(), gone: false })
         issue.reset()
       },
     })
+  }
+
+  // Recorded here, during this component's render, rather than inside the panel's:
+  // React allows a component to adjust its own state as it renders, and not
+  // somebody else's.
+  if (shown !== null && !shown.gone && wentAway(accounts, shown)) {
+    setShown({ ...shown, gone: true })
   }
 
   return (
@@ -66,10 +77,7 @@ export function PeoplePanel() {
               username={shown.username}
               invitation={shown.invitation}
               link={invitationLink(window.location.origin, shown.invitation.token)}
-              gone={
-                accounts.dataUpdatedAt > shown.issuedAt &&
-                !stillListed(list, shown.username, shown.invitation)
-              }
+              gone={shown.gone}
               namesOnlyThisDevice={namesOnlyThisDevice(window.location.hostname)}
               inviting={issue.isPending && issue.variables === shown.username}
               onInviteAgain={() => {
@@ -101,6 +109,25 @@ export function PeoplePanel() {
         </>
       )}
     </DataPanel>
+  )
+}
+
+/**
+ * Whether the latest read says the invitation stopped working before its time.
+ *
+ * Only a read that arrived after the invitation was issued can say anything — one
+ * from before could not have had it — and only one that arrived before it ran out,
+ * since after that its absence is the expiry. Both instants are this browser's
+ * clock against the hub's, so a skew between the two blurs the last few seconds and
+ * nothing else.
+ */
+function wentAway(accounts: ReturnType<typeof useAccounts>, shown: Shown): boolean {
+  const readAt = accounts.dataUpdatedAt
+  return (
+    accounts.data !== undefined &&
+    readAt > shown.issuedAt &&
+    readAt < shown.invitation.expiresAt.getTime() &&
+    !stillListed(accounts.data, shown.username, shown.invitation)
   )
 }
 
