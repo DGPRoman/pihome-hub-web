@@ -141,6 +141,17 @@ are sent to draw a preview, and a page that redeemed on load would have the toke
 that fetch before its person ever saw it. The code is drawn in the browser from the link, so
 the token is never an image anything could cache.
 
+**On Android, the join page offers the app.** A phone scans the code with its own camera, which
+opens this page. On Android it offers, before the browser's own Join, to open the invitation
+in the [pihome app](https://github.com/DGPRoman/pihome-android): an `intent:` link that hands
+it over as `pihome://join?hub=…&token=…`, from the page to the app through Android and never
+over the network. When the app is not installed, Chrome follows the link's fallback, which is
+the APK on this hub when it offers one (`/app/pihome.apk`, described by `/app/android.json`),
+and otherwise this same invitation. The page shows the download beside it, with its size and
+SHA-256. There is no store involved, and no `https` link that could open the app straight
+from the camera: Android verifies those against a public domain, which a hub at home has not
+got.
+
 While it is on screen the token is held in one place — the people section's state — and not in
 the query cache, where every component could read it. The request that fetched it is
 collected the moment it is reset, since a finished mutation otherwise keeps its answer for
@@ -190,7 +201,7 @@ pihome-hub-admin create roman --role admin   # prompts for the password, twice
 Then log in on the page. As an admin you also get the people section, which is how everybody
 else gets in: add a name, and open the link it shows in a private window to see what joining
 looks like. A link made on `localhost` opens only the device it was made on — the card says
-so — so to invite a phone, open the page by the hub's address on your network. `npm run dev` proxies `/v1` and `/health` to
+so — so to invite a phone, open the page by the hub's address on your network. `npm run dev` proxies `/v1`, `/health` and `/app/` to
 `http://127.0.0.1:5002` and adds nothing on the way out, so requests stay same-origin —
 which is what lets the session cookie work here exactly as it will anywhere else, and why
 the app needs no CORS-shaped special case that would exist only in development. Point it at
@@ -330,6 +341,7 @@ src/
 │   ├── relays.ts               GET and PUT, one relay or all, with runtime validation
 │   ├── sensors.ts              GET, with runtime validation and wire mapping
 │   ├── devices.ts              GET, the devices the hub polls
+│   ├── androidApp.ts           GET, the Android app this hub offers, if any
 │   ├── automation.ts           GET, the configured rules
 │   ├── session.ts              log in by password or invitation, and out
 │   └── users.ts                accounts and their invitations, for an admin
@@ -341,6 +353,7 @@ src/
 │   ├── useSetAllRelays.ts      the same, for every relay at once
 │   ├── useSensors.ts           the sensor read
 │   ├── useDevices.ts           the device read
+│   ├── useAndroidApp.ts        whether the hub offers the Android app, asked once
 │   ├── useRules.ts             the automation read
 │   ├── useSession.ts           who this browser is, and the ways in and out
 │   ├── useAccounts.ts          the account list and every write to it
@@ -366,12 +379,13 @@ src/
 │   ├── AddPersonForm.tsx       a name and a role, then straight to the invitation
 │   ├── InvitationCard.tsx      the code, the link and the time left on them
 │   ├── QrCode.tsx              a QR code, drawn in the browser
-│   └── JoinPage.tsx            where an invitation link lands
+│   └── JoinPage.tsx            where an invitation link lands, and offers the Android app
 ├── lib/
 │   ├── roles.ts                what each role may do, ranked as the hub ranks it
 │   ├── freshness.ts            how far a single sensor reading can be trusted
 │   ├── devices.ts              where a device stands with the hub, in four answers
 │   ├── join.ts                 the join link, and reading one out of the address
+│   ├── androidApp.ts           handing an invitation to the Android app
 │   ├── qr.ts                   a link as a QR matrix, as one SVG path
 │   ├── usernames.ts            the hub's rule for a name, mirrored for the form
 │   └── time.ts                 relative times and countdowns, as pure functions
