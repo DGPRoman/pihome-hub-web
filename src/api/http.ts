@@ -204,13 +204,23 @@ function errorForResponse(response: Response): HubError {
         'The hub is refusing further attempts for now. Wait a few minutes.',
         status,
       )
-    // A gateway reporting that what sits behind it is unreachable. In
-    // development that gateway is the Vite proxy, which answers 502 for a hub
-    // that is not running; treating it as a server fault would blame the hub for
-    // being switched off.
+    // Two different things answer these. A gateway in front of the hub, such as
+    // the Vite proxy in development, answers 502 with a page of its own for a
+    // hub that is not running; blaming the hub for that would send the operator
+    // to look at a fault it does not have. The hub itself answers 503, as JSON,
+    // when a relay or its storage fails: it is running and saying "not now", and
+    // asking whether it is running would send them to look in the wrong place.
+    // The body tells the two apart, as it does in the Android client.
     case 502:
     case 503:
     case 504:
+      if (looksLikeTheHub(response)) {
+        return new HubError(
+          'server',
+          'The hub could not do that right now. Try again in a moment.',
+          status,
+        )
+      }
       return new HubError('offline', 'The hub did not answer. Is it running?', status)
     default:
       return errorForUnmodelledStatus(response)
