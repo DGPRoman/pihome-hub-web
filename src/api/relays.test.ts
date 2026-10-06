@@ -98,16 +98,35 @@ describe('fetchRelays', () => {
     [422, 'malformed'],
     [429, 'rate-limited'],
     [500, 'server'],
-    // The dev proxy answers 502 for a hub that is not running, so these read as
-    // an unreachable hub rather than a hub that failed.
-    [502, 'offline'],
-    [503, 'offline'],
-    [504, 'offline'],
+    // The hub answers 503 as JSON when a relay or its storage fails. It is
+    // running and has answered, so this is not an unreachable hub.
+    [502, 'server'],
+    [503, 'server'],
+    [504, 'server'],
   ])('maps HTTP %i to the %s kind', async (status, kind) => {
     stubFetch(jsonResponse({ detail: 'nope' }, status))
 
     await expect(rejectionKind(fetchRelays())).resolves.toBe(kind)
   })
+
+  it('says the hub could not do it right now when the hub answers 503 itself', async () => {
+    stubFetch(jsonResponse({ detail: 'The service is temporarily unavailable.' }, 503))
+
+    await expect(fetchRelays()).rejects.toThrow('could not do that right now')
+  })
+
+  it.each([502, 503, 504])(
+    'reports a %i that is not JSON as an unreachable hub',
+    async (status) => {
+      // A gateway's own page: the dev proxy answers 502 for a hub that is not
+      // running, so this reads as a hub to go and look at rather than one that
+      // failed.
+      stubFetch(new Response('<html>Bad Gateway</html>', { status }))
+
+      await expect(rejectionKind(fetchRelays())).resolves.toBe('offline')
+      await expect(fetchRelays()).rejects.toThrow('Is it running?')
+    },
+  )
 
   it('reports an unreachable hub as offline rather than as a crash', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
